@@ -1,57 +1,151 @@
-// 인증 관련 API
+/**
+ * 인증 관련 API (HTTP-only 쿠키 기반)
+ */
 import apiClient from './index'
+
+// Cognito 환경변수
+const COGNITO_DOMAIN = import.meta.env.VITE_COGNITO_DOMAIN
+const COGNITO_CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID
+const COGNITO_REDIRECT_URI = import.meta.env.VITE_COGNITO_REDIRECT_URI
+const COGNITO_SIGN_OUT_URI = import.meta.env.VITE_COGNITO_SIGN_OUT_URI
+
+/**
+ * 구글 로그인 URL 생성 (Cognito Hosted UI)
+ * @returns {string} 구글 로그인 URL
+ */
+export function getGoogleLoginUrl() {
+  const params = new URLSearchParams({
+    client_id: COGNITO_CLIENT_ID,
+    response_type: 'code',
+    scope: 'openid email profile',
+    redirect_uri: COGNITO_REDIRECT_URI,
+    identity_provider: 'Google',
+  })
+  return `${COGNITO_DOMAIN}/oauth2/authorize?${params.toString()}`
+}
+
+/**
+ * Cognito 로그아웃 URL 생성
+ * @returns {string} 로그아웃 URL
+ */
+export function getCognitoLogoutUrl() {
+  const params = new URLSearchParams({
+    client_id: COGNITO_CLIENT_ID,
+    logout_uri: COGNITO_SIGN_OUT_URI,
+  })
+  return `${COGNITO_DOMAIN}/logout?${params.toString()}`
+}
 
 export default {
   /**
-   * 로그인
-   * @param {Object} credentials - { username, password }
-   * @returns {Promise} access_token 포함된 응답
+   * 회원가입 (이메일 인증번호 발송)
+   * @param {string} email - 이메일
+   * @param {string} password - 비밀번호
+   * @param {string} name - 이름
+   * @returns {Promise} 인증번호 발송 결과
    */
-  login(credentials) {
-    // OAuth2 형식의 form data로 전송
-    const formData = new URLSearchParams()
-    formData.append('username', credentials.username)
-    formData.append('password', credentials.password)
-
-    return apiClient.post('/auth/token', formData, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+  async register(email, password, name) {
+    const response = await apiClient.post('/auth/register', {
+      email,
+      password,
+      name,
     })
+    return response
   },
 
   /**
-   * 회원가입
-   * @param {Object} userData - { username, email, password, full_name }
-   * @returns {Promise} 생성된 사용자 정보
+   * 이메일 인증번호 확인
+   * @param {string} email - 이메일
+   * @param {string} code - 인증번호 (6자리)
+   * @returns {Promise} 로그인 결과 (쿠키 자동 설정)
    */
-  register(userData) {
-    return apiClient.post('/auth/register', userData)
+  async verifyEmail(email, code) {
+    const response = await apiClient.post('/auth/verify-email', {
+      email,
+      code,
+    })
+    return response
+  },
+
+  /**
+   * 인증번호 재발송
+   * @param {string} email - 이메일
+   * @returns {Promise}
+   */
+  async resendCode(email) {
+    const response = await apiClient.post('/auth/resend-code', {
+      email,
+    })
+    return response
+  },
+
+  /**
+   * 이메일/비밀번호 로그인
+   * @param {string} email - 이메일
+   * @param {string} password - 비밀번호
+   * @returns {Promise} 로그인 결과 (쿠키 자동 설정)
+   */
+  async login(email, password) {
+    const response = await apiClient.post('/auth/login', {
+      email,
+      password,
+    })
+    return response
+  },
+
+  /**
+   * 로그아웃 (쿠키 삭제)
+   * @returns {Promise}
+   */
+  async logout() {
+    const response = await apiClient.post('/auth/logout')
+    return response
+  },
+
+  /**
+   * 토큰 갱신 (쿠키 자동 사용)
+   * @returns {Promise}
+   */
+  async refresh() {
+    const response = await apiClient.post('/auth/refresh')
+    return response
+  },
+
+  /**
+   * 인증 상태 확인
+   * @returns {Promise} { authenticated: boolean }
+   */
+  async checkAuth() {
+    const response = await apiClient.get('/auth/check')
+    return response
   },
 
   /**
    * 현재 사용자 정보 조회
    * @returns {Promise} 사용자 정보
    */
-  getCurrentUser() {
-    return apiClient.get('/auth/me')
+  async getCurrentUser() {
+    const response = await apiClient.get('/auth/me')
+    return response
   },
 
   /**
-   * 사용자 정보 수정
-   * @param {Object} userData - 수정할 사용자 정보
+   * 사용자 프로필 수정
+   * @param {Object} userData - { name?, gender?, birth_date? }
    * @returns {Promise} 수정된 사용자 정보
    */
-  updateProfile(userData) {
-    return apiClient.put('/auth/me', userData)
+  async updateProfile(userData) {
+    const response = await apiClient.put('/auth/me', userData)
+    return response
   },
 
   /**
-   * 비밀번호 변경
-   * @param {Object} passwords - { current_password, new_password }
-   * @returns {Promise}
+   * OAuth 콜백 처리 (Authorization Code → 로컬 JWT)
+   * @param {string} code - Authorization Code
+   * @returns {Promise} 로그인 결과
    */
-  changePassword(passwords) {
-    return apiClient.post('/auth/change-password', passwords)
+  async handleCallback(code) {
+    const response = await apiClient.post('/auth/callback', { code })
+    return response
   },
 }

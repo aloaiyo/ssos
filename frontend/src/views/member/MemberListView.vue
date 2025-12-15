@@ -70,17 +70,7 @@
                   clearable
                 ></v-select>
               </v-col>
-              <v-col cols="12" sm="6" md="3">
-                <v-select
-                  v-model="typeFilter"
-                  :items="typeOptions"
-                  label="선호 타입"
-                  variant="outlined"
-                  density="compact"
-                  hide-details
-                  clearable
-                ></v-select>
-              </v-col>
+
             </v-row>
           </v-card-text>
         </v-card>
@@ -104,29 +94,15 @@
                   </span>
                 </v-avatar>
                 <div>
-                  <div>{{ item.user?.full_name || item.user?.username }}</div>
+                  <div :class="{'text-blue': item.gender === 'male', 'text-pink': item.gender === 'female'}">
+                    {{ item.user?.full_name || item.user?.username }}
+                  </div>
                   <div class="text-caption text-grey">{{ item.user?.email }}</div>
                 </div>
               </div>
             </template>
 
-            <!-- 성별 -->
-            <template v-slot:item.gender="{ item }">
-              <v-chip
-                :color="item.gender === 'male' ? 'blue' : 'pink'"
-                size="small"
-                label
-              >
-                {{ item.gender === 'male' ? '남성' : '여성' }}
-              </v-chip>
-            </template>
 
-            <!-- 선호 타입 -->
-            <template v-slot:item.preferred_type="{ item }">
-              <v-chip size="small" label>
-                {{ getPreferredTypeLabel(item.preferred_type) }}
-              </v-chip>
-            </template>
 
             <!-- 가입일 -->
             <template v-slot:item.created_at="{ item }">
@@ -194,12 +170,7 @@
               </v-list-item-subtitle>
             </v-list-item>
 
-            <v-list-item>
-              <v-list-item-title>선호 타입</v-list-item-title>
-              <v-list-item-subtitle>
-                {{ getPreferredTypeLabel(selectedMember.preferred_type) }}
-              </v-list-item-subtitle>
-            </v-list-item>
+
 
             <v-list-item>
               <v-list-item-title>가입일</v-list-item-title>
@@ -251,17 +222,11 @@ const genderOptions = [
   { title: '여성', value: 'female' },
 ]
 
-const typeOptions = [
-  { title: '단식', value: 'singles' },
-  { title: '복식', value: 'doubles' },
-  { title: '무관', value: 'both' },
-]
+
 
 // 테이블 헤더
 const headers = [
   { title: '이름', key: 'user', sortable: true },
-  { title: '성별', key: 'gender', sortable: true },
-  { title: '선호 타입', key: 'preferred_type', sortable: true },
   { title: '가입일', key: 'created_at', sortable: true },
   { title: '액션', key: 'actions', sortable: false, align: 'center' },
 ]
@@ -274,9 +239,7 @@ const filteredMembers = computed(() => {
     filtered = filtered.filter(m => m.gender === genderFilter.value)
   }
 
-  if (typeFilter.value) {
-    filtered = filtered.filter(m => m.preferred_type === typeFilter.value)
-  }
+
 
   return filtered
 })
@@ -285,15 +248,7 @@ const filteredMembers = computed(() => {
 const detailDialog = ref(false)
 const selectedMember = ref(null)
 
-// 선호 타입 라벨
-function getPreferredTypeLabel(type) {
-  const labels = {
-    singles: '단식',
-    doubles: '복식',
-    both: '무관',
-  }
-  return labels[type] || type
-}
+
 
 // 회원 상세 보기
 function viewMember(member) {

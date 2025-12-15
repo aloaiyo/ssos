@@ -1,0 +1,50 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+  workflow_dispatch:  # 수동 실행 가능
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/ssos/backend
+
+            # Pull latest code
+            git pull origin main
+
+            # Copy production env if exists
+            if [ -f .env.production ]; then
+              cp .env.production .env
+              echo "Using .env.production"
+            fi
+
+            # Install dependencies
+            poetry install --no-dev
+
+            # Run migrations
+            poetry run aerich upgrade || echo "Migration failed or already applied"
+
+            # Restart uvicorn (기존 프로세스 종료 후 재시작)
+            pkill -f "uvicorn app.main:app" || true
+            nohup poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 > /tmp/uvicorn.log 2>&1 &
+
+            sleep 3
+
+            # Verify server is running
+            if curl -s http://localhost:8000/docs > /dev/null; then
+              echo "✅ Backend deployment completed!"
+            else
+              echo "⚠️ Server may not be running properly, check /tmp/uvicorn.log"
+            fi

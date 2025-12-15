@@ -1,284 +1,198 @@
 <template>
-  <v-container>
+  <div class="club-manage">
     <!-- 헤더 -->
-    <v-row>
-      <v-col cols="12">
-        <div class="d-flex justify-space-between align-center mb-4">
-          <h1 class="text-h4 font-weight-bold">동호회 관리</h1>
+    <header class="page-header">
+      <div class="header-content">
+        <div class="header-info">
           <v-btn
-            :to="{ name: 'club-list' }"
-            variant="outlined"
+            icon
+            variant="text"
+            size="small"
+            class="mr-2"
+            @click="router.back()"
           >
-            목록으로
+            <v-icon>mdi-arrow-left</v-icon>
           </v-btn>
+          <div>
+            <h1 class="page-title">{{ club?.name || '동호회 관리' }}</h1>
+            <p class="page-subtitle">동호회 설정 및 관리</p>
+          </div>
         </div>
-      </v-col>
-    </v-row>
-
-    <v-row>
-      <!-- 동호회 생성 폼 -->
-      <v-col cols="12" md="6">
-        <v-card>
-          <v-card-title class="text-h6">동호회 생성</v-card-title>
-          <v-divider></v-divider>
-          <v-card-text>
-            <v-form ref="createForm" v-model="createValid" @submit.prevent="handleCreate">
-              <v-text-field
-                v-model="newClub.name"
-                :rules="[required]"
-                label="동호회명 *"
-                variant="outlined"
-                required
-              ></v-text-field>
-
-              <v-textarea
-                v-model="newClub.description"
-                label="설명"
-                variant="outlined"
-                rows="3"
-              ></v-textarea>
-
-              <v-text-field
-                v-model="newClub.location"
-                label="위치"
-                variant="outlined"
-                prepend-inner-icon="mdi-map-marker"
-              ></v-text-field>
-
-              <v-btn
-                :loading="isLoading"
-                :disabled="!createValid"
-                type="submit"
-                color="primary"
-                block
-              >
-                생성
-              </v-btn>
-            </v-form>
-          </v-card-text>
-        </v-card>
-      </v-col>
-
-      <!-- 동호회 목록 및 관리 -->
-      <v-col cols="12" md="6">
-        <v-card>
-          <v-card-title class="text-h6">등록된 동호회</v-card-title>
-          <v-divider></v-divider>
-          <v-card-text>
-            <v-list v-if="clubs.length > 0">
-              <v-list-item
-                v-for="club in clubs"
-                :key="club.id"
-                class="mb-2"
-              >
-                <template v-slot:prepend>
-                  <v-icon icon="mdi-account-group"></v-icon>
-                </template>
-
-                <v-list-item-title>{{ club.name }}</v-list-item-title>
-                <v-list-item-subtitle>{{ club.location || '위치 정보 없음' }}</v-list-item-subtitle>
-
-                <template v-slot:append>
-                  <v-btn
-                    icon="mdi-pencil"
-                    size="small"
-                    variant="text"
-                    @click="editClub(club)"
-                  ></v-btn>
-                  <v-btn
-                    icon="mdi-delete"
-                    size="small"
-                    variant="text"
-                    color="error"
-                    @click="confirmDelete(club)"
-                  ></v-btn>
-                </template>
-              </v-list-item>
-            </v-list>
-            <div v-else class="text-center pa-4 text-grey">
-              등록된 동호회가 없습니다.
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
-
-    <!-- 수정 다이얼로그 -->
-    <v-dialog v-model="editDialog" max-width="600">
-      <v-card>
-        <v-card-title class="text-h6">동호회 수정</v-card-title>
-        <v-divider></v-divider>
-        <v-card-text>
-          <v-form ref="editForm" v-model="editValid">
-            <v-text-field
-              v-model="editingClub.name"
-              :rules="[required]"
-              label="동호회명 *"
-              variant="outlined"
-              required
-            ></v-text-field>
-
-            <v-textarea
-              v-model="editingClub.description"
-              label="설명"
-              variant="outlined"
-              rows="3"
-            ></v-textarea>
-
-            <v-text-field
-              v-model="editingClub.location"
-              label="위치"
-              variant="outlined"
-              prepend-inner-icon="mdi-map-marker"
-            ></v-text-field>
-          </v-form>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn
-            variant="text"
-            @click="editDialog = false"
-          >
-            취소
-          </v-btn>
-          <v-btn
-            :loading="isLoading"
-            :disabled="!editValid"
+        <div class="header-actions">
+          <v-chip
+            v-if="myRole === 'manager'"
             color="primary"
-            @click="handleUpdate"
+            variant="tonal"
+            size="small"
           >
-            저장
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+            매니저
+          </v-chip>
+        </div>
+      </div>
+    </header>
 
-    <!-- 삭제 확인 다이얼로그 -->
-    <v-dialog v-model="deleteDialog" max-width="400">
-      <v-card>
-        <v-card-title class="text-h6">동호회 삭제</v-card-title>
-        <v-card-text>
-          <p>정말로 <strong>{{ deletingClub?.name }}</strong>을(를) 삭제하시겠습니까?</p>
-          <p class="text-error mt-2">이 작업은 되돌릴 수 없습니다.</p>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn
-            variant="text"
-            @click="deleteDialog = false"
-          >
-            취소
-          </v-btn>
-          <v-btn
-            :loading="isLoading"
-            color="error"
-            @click="handleDelete"
-          >
-            삭제
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </v-container>
+    <!-- 탭 네비게이션 -->
+    <v-tabs
+      v-model="currentTab"
+      color="primary"
+      class="tab-navigation"
+      show-arrows
+    >
+      <v-tab
+        v-for="tab in tabs"
+        :key="tab.value"
+        :value="tab.value"
+        :prepend-icon="tab.icon"
+      >
+        {{ tab.title }}
+      </v-tab>
+    </v-tabs>
+
+    <!-- 탭 컨텐츠 -->
+    <v-window v-model="currentTab" class="tab-content">
+      <!-- 기본 정보 -->
+      <v-window-item value="info">
+        <ClubInfoTab :club="club" @update="handleClubUpdate" />
+      </v-window-item>
+
+      <!-- 회원 관리 -->
+      <v-window-item value="members">
+        <MemberManagementTab :club-id="clubId" />
+      </v-window-item>
+
+      <!-- 일정 관리 -->
+      <v-window-item value="sessions">
+        <SessionManagementTab :club-id="clubId" :club="club" />
+      </v-window-item>
+
+      <!-- 공지사항 -->
+      <v-window-item value="announcements">
+        <AnnouncementTab :club-id="clubId" />
+      </v-window-item>
+
+      <!-- 회비 관리 -->
+      <v-window-item value="fees">
+        <FeeManagementTab :club-id="clubId" />
+      </v-window-item>
+
+      <!-- 통계 -->
+      <v-window-item value="stats">
+        <ClubStatsTab :club-id="clubId" />
+      </v-window-item>
+    </v-window>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useClubStore } from '@/stores/club'
-import { required } from '@/utils/validators'
+import apiClient from '@/api'
+import MemberManagementTab from './components/MemberManagementTab.vue'
+import SessionManagementTab from './components/SessionManagementTab.vue'
+import ClubInfoTab from './components/ClubInfoTab.vue'
+import AnnouncementTab from './components/AnnouncementTab.vue'
+import FeeManagementTab from './components/FeeManagementTab.vue'
+import ClubStatsTab from './components/ClubStatsTab.vue'
 
+const route = useRoute()
+const router = useRouter()
 const clubStore = useClubStore()
-const { clubs, isLoading } = storeToRefs(clubStore)
 
-const createForm = ref(null)
-const editForm = ref(null)
-const createValid = ref(false)
-const editValid = ref(false)
+const { selectedClub } = storeToRefs(clubStore)
 
-const newClub = ref({
-  name: '',
-  description: '',
-  location: '',
+const clubId = ref(parseInt(route.params.id))
+const club = ref(null)
+const currentTab = ref('info')
+
+const tabs = [
+  { value: 'info', title: '기본 정보', icon: 'mdi-information-outline' },
+  { value: 'members', title: '회원 관리', icon: 'mdi-account-multiple-outline' },
+  { value: 'sessions', title: '일정 관리', icon: 'mdi-calendar-outline' },
+  { value: 'announcements', title: '공지사항', icon: 'mdi-bullhorn-outline' },
+  { value: 'fees', title: '회비 관리', icon: 'mdi-cash-multiple' },
+  { value: 'stats', title: '통계', icon: 'mdi-chart-bar' },
+]
+
+const myRole = computed(() => {
+  return club.value?.my_role || selectedClub.value?.my_role
 })
 
-const editDialog = ref(false)
-const editingClub = ref({
-  id: null,
-  name: '',
-  description: '',
-  location: '',
-})
-
-const deleteDialog = ref(false)
-const deletingClub = ref(null)
-
-// 동호회 생성
-async function handleCreate() {
-  if (!createValid.value) return
-
+async function loadClub() {
   try {
-    await clubStore.createClub(newClub.value)
-    // 폼 초기화
-    newClub.value = {
-      name: '',
-      description: '',
-      location: '',
-    }
-    createForm.value?.reset()
+    const response = await apiClient.get(`/clubs/${clubId.value}`)
+    club.value = response.data
   } catch (error) {
-    console.error('동호회 생성 실패:', error)
+    console.error('동호회 정보 로드 실패:', error)
   }
 }
 
-// 수정 다이얼로그 열기
-function editClub(club) {
-  editingClub.value = {
-    id: club.id,
-    name: club.name,
-    description: club.description || '',
-    location: club.location || '',
+function handleClubUpdate(updatedClub) {
+  club.value = updatedClub
+}
+
+onMounted(() => {
+  loadClub()
+
+  // URL 쿼리에서 탭 설정
+  if (route.query.tab) {
+    currentTab.value = route.query.tab
   }
-  editDialog.value = true
-}
-
-// 동호회 수정
-async function handleUpdate() {
-  if (!editValid.value) return
-
-  try {
-    await clubStore.updateClub(editingClub.value.id, {
-      name: editingClub.value.name,
-      description: editingClub.value.description,
-      location: editingClub.value.location,
-    })
-    editDialog.value = false
-  } catch (error) {
-    console.error('동호회 수정 실패:', error)
-  }
-}
-
-// 삭제 확인 다이얼로그 열기
-function confirmDelete(club) {
-  deletingClub.value = club
-  deleteDialog.value = true
-}
-
-// 동호회 삭제
-async function handleDelete() {
-  if (!deletingClub.value) return
-
-  try {
-    await clubStore.deleteClub(deletingClub.value.id)
-    deleteDialog.value = false
-    deletingClub.value = null
-  } catch (error) {
-    console.error('동호회 삭제 실패:', error)
-  }
-}
-
-// 컴포넌트 마운트 시 동호회 목록 로드
-onMounted(async () => {
-  await clubStore.fetchClubs()
 })
 </script>
+
+<style scoped>
+.club-manage {
+  background: #F8FAFC;
+  min-height: calc(100vh - 64px);
+}
+
+.page-header {
+  background: white;
+  border-bottom: 1px solid #E2E8F0;
+  padding: 20px 24px;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.header-info {
+  display: flex;
+  align-items: center;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1E293B;
+  margin: 0;
+}
+
+.page-subtitle {
+  font-size: 0.875rem;
+  color: #64748B;
+  margin: 0;
+}
+
+.tab-navigation {
+  background: white;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.tab-navigation :deep(.v-tabs) {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.tab-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
+}
+</style>

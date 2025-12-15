@@ -3,12 +3,20 @@ import apiClient from './index'
 
 export default {
   /**
-   * 동호회 목록 조회
-   * @param {Object} params - { skip, limit }
+   * 동호회 목록 조회 (전체)
+   * @param {Object} params - { skip, limit, search }
    * @returns {Promise} 동호회 목록
    */
   getClubs(params = {}) {
     return apiClient.get('/clubs/', { params })
+  },
+
+  /**
+   * 내 동호회 목록 조회
+   * @returns {Promise} 내가 가입한 동호회 목록
+   */
+  getMyClubs() {
+    return apiClient.get('/users/me/clubs')
   },
 
   /**

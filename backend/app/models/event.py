@@ -2,7 +2,7 @@
 일정 및 세션 모델
 """
 from tortoise import fields
-from tortoise.models import Model
+from app.models.base import BaseModel
 from enum import Enum
 
 
@@ -20,13 +20,20 @@ class SessionStatus(str, Enum):
 
 
 class ParticipationType(str, Enum):
-    """참가 타입"""
+    """참가 타입 (경기 종류)"""
     MENS_DOUBLES = "mens_doubles"
     MIXED_DOUBLES = "mixed_doubles"
     SINGLES = "singles"
 
 
-class Event(Model):
+class ParticipantCategory(str, Enum):
+    """참가자 유형"""
+    MEMBER = "member"        # 정회원 (동호회 가입)
+    GUEST = "guest"          # 게스트 (시스템 미가입)
+    ASSOCIATE = "associate"  # 준회원 (시스템 가입, 동호회 미가입)
+
+
+class Event(BaseModel):
     """일정 모델"""
 
     id = fields.IntField(pk=True)
@@ -51,7 +58,7 @@ class Event(Model):
         return f"{self.title} ({self.event_type})"
 
 
-class SessionConfig(Model):
+class SessionConfig(BaseModel):
     """세션 설정 템플릿"""
 
     id = fields.IntField(pk=True)
@@ -77,7 +84,7 @@ class SessionConfig(Model):
         return self.name
 
 
-class Session(Model):
+class Session(BaseModel):
     """세션 모델"""
 
     id = fields.IntField(pk=True)
@@ -113,8 +120,13 @@ class Session(Model):
         return f"{self.event.title} - {self.date} {self.start_time}"
 
 
-class SessionParticipant(Model):
-    """세션 참가자"""
+class SessionParticipant(BaseModel):
+    """
+    세션 참가자
+    - 정회원: club_member 설정
+    - 게스트: guest 설정
+    - 준회원: user 설정 (동호회 미가입 유저)
+    """
 
     id = fields.IntField(pk=True)
     session = fields.ForeignKeyField(
@@ -122,12 +134,33 @@ class SessionParticipant(Model):
         related_name="participants",
         on_delete=fields.CASCADE
     )
+
+    # 참가자 유형에 따라 하나만 설정됨
     club_member = fields.ForeignKeyField(
         "models.ClubMember",
         related_name="session_participations",
-        on_delete=fields.CASCADE
+        on_delete=fields.CASCADE,
+        null=True  # 게스트/준회원인 경우 null
     )
-    participation_type = fields.CharEnumField(ParticipationType)
+    guest = fields.ForeignKeyField(
+        "models.Guest",
+        related_name="session_participations",
+        on_delete=fields.CASCADE,
+        null=True  # 정회원/준회원인 경우 null
+    )
+    user = fields.ForeignKeyField(
+        "models.User",
+        related_name="associate_session_participations",
+        on_delete=fields.CASCADE,
+        null=True  # 정회원/게스트인 경우 null (준회원용)
+    )
+
+    # 참가자 유형
+    participant_category = fields.CharEnumField(
+        ParticipantCategory,
+        default=ParticipantCategory.MEMBER
+    )
+    participation_type = fields.CharEnumField(ParticipationType, null=True)
     arrived_at = fields.DatetimeField(null=True)
 
     class Meta:
@@ -135,4 +168,25 @@ class SessionParticipant(Model):
         ordering = ["arrived_at"]
 
     def __str__(self) -> str:
-        return f"{self.club_member.user.name} @ {self.session}"
+        name = self.get_participant_name()
+        return f"{name} @ {self.session}"
+
+    def get_participant_name(self) -> str:
+        """참가자 이름 반환"""
+        if self.club_member:
+            return self.club_member.user.name
+        elif self.guest:
+            return f"{self.guest.name} (게스트)"
+        elif self.user:
+            return f"{self.user.name} (준회원)"
+        return "Unknown"
+
+    def get_participant_gender(self) -> str:
+        """참가자 성별 반환"""
+        if self.club_member:
+            return self.club_member.gender.value
+        elif self.guest:
+            return self.guest.gender.value
+        elif self.user:
+            return self.user.gender or "male"
+        return "male"

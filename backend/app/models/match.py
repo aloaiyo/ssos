@@ -2,7 +2,7 @@
 경기 모델
 """
 from tortoise import fields
-from tortoise.models import Model
+from app.models.base import BaseModel
 from enum import Enum
 
 
@@ -26,7 +26,7 @@ class Team(str, Enum):
     B = "B"
 
 
-class Match(Model):
+class Match(BaseModel):
     """경기 모델"""
 
     id = fields.IntField(pk=True)
@@ -56,8 +56,20 @@ class Match(Model):
         return f"Match #{self.match_number} - Court {self.court_number}"
 
 
-class MatchParticipant(Model):
-    """경기 참가자"""
+class ParticipantCategory(str, Enum):
+    """참가자 유형"""
+    MEMBER = "member"        # 정회원 (동호회 가입)
+    GUEST = "guest"          # 게스트 (시스템 미가입)
+    ASSOCIATE = "associate"  # 준회원 (시스템 가입, 동호회 미가입)
+
+
+class MatchParticipant(BaseModel):
+    """
+    경기 참가자
+    - 정회원: club_member 설정
+    - 게스트: guest 설정
+    - 준회원: user 설정 (동호회 미가입 유저)
+    """
 
     id = fields.IntField(pk=True)
     match = fields.ForeignKeyField(
@@ -65,24 +77,75 @@ class MatchParticipant(Model):
         related_name="participants",
         on_delete=fields.CASCADE
     )
+
+    # 참가자 유형에 따라 하나만 설정됨
     club_member = fields.ForeignKeyField(
         "models.ClubMember",
         related_name="match_participations",
-        on_delete=fields.CASCADE
+        on_delete=fields.CASCADE,
+        null=True  # 게스트/준회원인 경우 null
+    )
+    guest = fields.ForeignKeyField(
+        "models.Guest",
+        related_name="match_participations",
+        on_delete=fields.CASCADE,
+        null=True  # 정회원/준회원인 경우 null
+    )
+    user = fields.ForeignKeyField(
+        "models.User",
+        related_name="associate_match_participations",
+        on_delete=fields.CASCADE,
+        null=True  # 정회원/게스트인 경우 null (준회원용)
+    )
+
+    # 참가자 유형
+    participant_category = fields.CharEnumField(
+        ParticipantCategory,
+        default=ParticipantCategory.MEMBER
     )
     team = fields.CharEnumField(Team)
     position = fields.IntField()  # 1 or 2
 
     class Meta:
         table = "match_participants"
-        unique_together = [("match", "club_member")]
         ordering = ["team", "position"]
 
     def __str__(self) -> str:
-        return f"{self.club_member.user.name} - Team {self.team} (Pos {self.position})"
+        name = self.get_participant_name()
+        return f"{name} - Team {self.team} (Pos {self.position})"
+
+    def get_participant_name(self) -> str:
+        """참가자 이름 반환"""
+        if self.club_member:
+            return self.club_member.user.name
+        elif self.guest:
+            return self.guest.name
+        elif self.user:
+            return self.user.name
+        return "Unknown"
+
+    def get_participant_gender(self) -> str:
+        """참가자 성별 반환"""
+        if self.club_member:
+            return self.club_member.gender.value
+        elif self.guest:
+            return self.guest.gender.value
+        elif self.user:
+            return self.user.gender or "male"
+        return "male"
+
+    def get_participant_id(self) -> int:
+        """참가자 고유 ID 반환 (통계용)"""
+        if self.club_member:
+            return self.club_member_id
+        elif self.guest:
+            return self.guest_id
+        elif self.user:
+            return self.user_id
+        return 0
 
 
-class MatchResult(Model):
+class MatchResult(BaseModel):
     """경기 결과"""
 
     id = fields.IntField(pk=True)

@@ -2,10 +2,10 @@
 랭킹 모델
 """
 from tortoise import fields
-from tortoise.models import Model
+from app.models.base import BaseModel
 
 
-class Ranking(Model):
+class Ranking(BaseModel):
     """랭킹 모델"""
 
     id = fields.IntField(pk=True)

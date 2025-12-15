@@ -2,14 +2,21 @@
 동호회 회원 모델
 """
 from tortoise import fields
-from tortoise.models import Model
+from app.models.base import BaseModel
 from enum import Enum
 
 
 class MemberRole(str, Enum):
     """회원 역할"""
-    ADMIN = "admin"
-    MEMBER = "member"
+    MANAGER = "manager"  # 클럽 관리자
+    MEMBER = "member"    # 일반 회원
+
+
+class MemberStatus(str, Enum):
+    """회원 상태"""
+    PENDING = "pending"    # 가입 대기
+    ACTIVE = "active"      # 활성 (승인됨)
+    INACTIVE = "inactive"  # 비활성
 
 
 class Gender(str, Enum):
@@ -18,14 +25,7 @@ class Gender(str, Enum):
     FEMALE = "female"
 
 
-class PreferredType(str, Enum):
-    """선호 경기 타입"""
-    MENS_DOUBLES = "mens_doubles"
-    MIXED_DOUBLES = "mixed_doubles"
-    SINGLES = "singles"
-
-
-class ClubMember(Model):
+class ClubMember(BaseModel):
     """동호회 회원 모델"""
 
     id = fields.IntField(pk=True)
@@ -40,9 +40,15 @@ class ClubMember(Model):
         on_delete=fields.CASCADE
     )
     role = fields.CharEnumField(MemberRole, default=MemberRole.MEMBER)
+    status = fields.CharEnumField(MemberStatus, default=MemberStatus.PENDING)
+    nickname = fields.CharField(max_length=100, null=True)  # 클럽 내 닉네임
     gender = fields.CharEnumField(Gender)
-    preferred_type = fields.CharEnumField(PreferredType)
-    joined_at = fields.DatetimeField(auto_now_add=True)
+
+    # 통계
+    total_games = fields.IntField(default=0)
+    wins = fields.IntField(default=0)
+    losses = fields.IntField(default=0)
+    draws = fields.IntField(default=0)
 
     # 관계
     session_participations: fields.ReverseRelation["SessionParticipant"]
@@ -52,7 +58,19 @@ class ClubMember(Model):
     class Meta:
         table = "club_members"
         unique_together = [("club", "user")]
-        ordering = ["-joined_at"]
+        ordering = ["-created_at"]
 
     def __str__(self) -> str:
-        return f"{self.user.name} @ {self.club.name}"
+        return f"{self.nickname or self.user.name} @ {self.club.name}"
+
+    @property
+    def win_rate(self) -> float:
+        """승률 계산"""
+        if self.total_games == 0:
+            return 0.0
+        return round(self.wins / self.total_games * 100, 1)
+
+    @property
+    def is_manager(self) -> bool:
+        """관리자 여부"""
+        return self.role == MemberRole.MANAGER

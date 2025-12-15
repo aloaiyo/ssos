@@ -2,9 +2,16 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const routes = [
-  // 홈
+  // 랜딩 페이지 (비로그인)
   {
     path: '/',
+    name: 'landing',
+    component: () => import('@/views/LandingView.vue'),
+    meta: { isLanding: true },
+  },
+  // 대시보드 (로그인 후 홈)
+  {
+    path: '/dashboard',
     name: 'home',
     component: () => import('@/views/HomeView.vue'),
     meta: { requiresAuth: true },
@@ -22,11 +29,35 @@ const routes = [
     component: () => import('@/views/auth/RegisterView.vue'),
     meta: { requiresGuest: true },
   },
+  {
+    path: '/auth/verify',
+    name: 'verify-email',
+    component: () => import('@/views/auth/VerifyEmailView.vue'),
+    meta: { requiresGuest: true },
+  },
+  {
+    path: '/auth/callback',
+    name: 'auth-callback',
+    component: () => import('@/views/auth/CallbackView.vue'),
+  },
+  {
+    path: '/auth/complete-profile',
+    name: 'profile-completion',
+    component: () => import('@/views/auth/ProfileCompletionView.vue'),
+    meta: { requiresAuth: true },
+  },
   // 동호회
   {
     path: '/clubs',
     name: 'club-list',
     component: () => import('@/views/club/ClubListView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    // 주의: /clubs/create가 /clubs/:id보다 먼저 정의되어야 함
+    path: '/clubs/create',
+    name: 'club-create',
+    component: () => import('@/views/club/ClubCreateView.vue'),
     meta: { requiresAuth: true },
   },
   {
@@ -36,10 +67,10 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    path: '/clubs/manage',
+    path: '/clubs/:id/manage',
     name: 'club-manage',
     component: () => import('@/views/club/ClubManageView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true },
+    meta: { requiresAuth: true },
   },
   // 회원
   {
@@ -53,6 +84,27 @@ const routes = [
     name: 'member-manage',
     component: () => import('@/views/member/MemberManageView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  // 일정
+  {
+    path: '/sessions',
+    name: 'session-list',
+    component: () => import('@/views/session/SessionListView.vue'),
+    meta: { requiresAuth: true },
+  },
+  // 경기
+  {
+    path: '/matches',
+    name: 'match-list',
+    component: () => import('@/views/match/MatchScheduleView.vue'),
+    meta: { requiresAuth: true },
+  },
+  // 랭킹
+  {
+    path: '/rankings',
+    name: 'ranking-list',
+    component: () => import('@/views/ranking/RankingView.vue'),
+    meta: { requiresAuth: true },
   },
   // 404
   {
@@ -71,14 +123,23 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
 
-  // 토큰이 있으면 사용자 정보 로드
-  if (authStore.token && !authStore.user) {
+  // 404 페이지는 바로 통과
+  if (to.name === 'not-found') {
+    return next()
+  }
+
+  // 인증 상태 확인 (쿠키 기반)
+  if (!authStore.user) {
     try {
-      await authStore.loadUser()
+      await authStore.checkAuth()
     } catch (error) {
-      console.error('사용자 정보 로드 실패:', error)
-      authStore.logout()
+      console.error('인증 상태 확인 실패:', error)
     }
+  }
+
+  // 랜딩 페이지: 로그인된 사용자는 대시보드로 리다이렉트
+  if (to.meta.isLanding && authStore.isAuthenticated) {
+    return next({ name: 'home' })
   }
 
   // 인증이 필요한 페이지
@@ -94,6 +155,22 @@ router.beforeEach(async (to, from, next) => {
   // 관리자 권한이 필요한 페이지
   if (to.meta.requiresAdmin && !authStore.isAdmin) {
     return next({ name: 'home' })
+  }
+
+  // 프로필 완성 체크 (인증된 사용자만)
+  if (authStore.isAuthenticated && authStore.user) {
+    const isProfileComplete = authStore.user.gender && authStore.user.birth_date
+    const isProfilePage = to.name === 'profile-completion'
+
+    // 프로필 미완성이고 프로필 페이지가 아니면 리다이렉트
+    if (!isProfileComplete && !isProfilePage && to.meta.requiresAuth) {
+      return next({ name: 'profile-completion' })
+    }
+
+    // 프로필 완성했는데 프로필 페이지로 가려고 하면 홈으로
+    if (isProfileComplete && isProfilePage) {
+      return next({ name: 'home' })
+    }
   }
 
   next()

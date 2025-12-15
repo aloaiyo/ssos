@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from tortoise.contrib.fastapi import register_tortoise
 from app.config import settings, TORTOISE_ORM
-from app.api import auth, clubs, members, events, sessions, matches, rankings
+from app.api import auth, clubs, members, events, sessions, matches, rankings, users, announcements, fees, guests
 
 # FastAPI 앱 생성
 app = FastAPI(
@@ -32,12 +32,16 @@ app.include_router(events.router, prefix="/api")
 app.include_router(sessions.router, prefix="/api")
 app.include_router(matches.router, prefix="/api")
 app.include_router(rankings.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
+app.include_router(announcements.router, prefix="/api")
+app.include_router(fees.router, prefix="/api")
+app.include_router(guests.router, prefix="/api")
 
 # Tortoise ORM 등록
 register_tortoise(
     app,
     config=TORTOISE_ORM,
-    generate_schemas=True,  # 개발 환경에서만 True, 프로덕션에서는 False로 설정
+    generate_schemas=False,  # aerich 마이그레이션 사용
     add_exception_handlers=True,
 )
 
