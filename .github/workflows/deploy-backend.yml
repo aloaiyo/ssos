@@ -19,6 +19,7 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            export PATH="$HOME/.local/bin:$PATH"
             cd ~/ssos/backend
 
             # Pull latest code
