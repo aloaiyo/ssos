@@ -34,8 +34,8 @@ jobs:
             # Install dependencies
             poetry install --only main --no-root
 
-            # Run migrations
-            poetry run aerich upgrade || echo "Migration failed or already applied"
+            # Run migrations (init-db for new DB, upgrade for existing)
+            poetry run aerich init-db || poetry run aerich upgrade || echo "Migration failed or already applied"
 
             # Restart uvicorn (기존 프로세스 종료 후 재시작)
             pkill -f "uvicorn app.main:app" || true
