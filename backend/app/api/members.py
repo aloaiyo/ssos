@@ -54,8 +54,8 @@ async def list_members(
         return [{
             "id": m.id,
             "user_id": m.user_id,
-            "user_name": m.user.name,
-            "user_email": m.user.email,
+            "user_name": m.user.name or (m.user.email.split('@')[0] if m.user.email else '회원'),
+            "user_email": m.user.email or '',
             "gender": m.gender.value,
             "role": m.role.value,
             "status": m.status.value,

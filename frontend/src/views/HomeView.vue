@@ -6,7 +6,6 @@
         <h1 class="greeting-title">
           안녕하세요, <span class="text-primary">{{ user?.name || '회원' }}</span>님
         </h1>
-        <p class="greeting-subtitle">오늘도 즐거운 테니스 되세요!</p>
       </div>
       <div class="header-actions">
         <v-btn
@@ -147,7 +146,7 @@
                 <span class="date-month">{{ formatMonth(session.date) }}</span>
               </div>
               <div class="schedule-info">
-                <span class="schedule-time">{{ session.start_time }} - {{ session.end_time }}</span>
+                <span class="schedule-time">{{ session.start_time?.substring(0, 5) }} - {{ session.end_time?.substring(0, 5) }}</span>
                 <span class="schedule-meta">
                   <v-icon size="14">mdi-account-group</v-icon>
                   {{ session.participant_count }}명

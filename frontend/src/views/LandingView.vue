@@ -6,12 +6,6 @@
       <v-container class="hero-content">
         <v-row align="center" justify="center" class="fill-height">
           <v-col cols="12" md="8" lg="6" class="text-center">
-            <div class="hero-badge animate-fade-in">
-              <v-chip color="white" variant="outlined" size="small">
-                <v-icon start size="small">mdi-tennis</v-icon>
-                테니스 동호회 관리의 새로운 기준
-              </v-chip>
-            </div>
             <h1 class="hero-title animate-slide-up">
               스마트하게 관리하는<br />
               <span class="text-accent">테니스 동호회</span>
