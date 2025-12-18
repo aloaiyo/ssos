@@ -32,7 +32,7 @@ jobs:
             fi
 
             # Install dependencies
-            poetry install --no-dev
+            poetry install --only main
 
             # Run migrations
             poetry run aerich upgrade || echo "Migration failed or already applied"
