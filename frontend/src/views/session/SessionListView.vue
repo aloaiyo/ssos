@@ -45,8 +45,19 @@
           @click="selectDay(day)"
         >
           <span class="day-number">{{ day.date.getDate() }}</span>
-          <div v-if="day.sessions.length > 0" class="session-dots">
-            <span v-for="(session, i) in day.sessions.slice(0, 3)" :key="i" class="session-dot" :class="getSessionStatusClass(session)"></span>
+          <div v-if="day.sessions.length > 0" class="session-times">
+            <div
+              v-for="(session, i) in day.sessions.slice(0, 2)"
+              :key="i"
+              class="session-time-chip"
+              :class="getSessionStatusClass(session)"
+              @click.stop="goToSession(session)"
+            >
+              {{ session.start_time?.substring(0, 5) }}
+            </div>
+            <div v-if="day.sessions.length > 2" class="more-sessions">
+              +{{ day.sessions.length - 2 }}
+            </div>
           </div>
         </div>
       </div>
@@ -105,8 +116,11 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useClubStore } from '@/stores/club'
 import apiClient from '@/api'
+
+const router = useRouter()
 
 const clubStore = useClubStore()
 const selectedClub = computed(() => clubStore.selectedClub)
@@ -200,6 +214,10 @@ function goToToday() {
 
 function selectDay(day) {
   selectedDay.value = day
+}
+
+function goToSession(session) {
+  router.push({ name: 'session-detail', params: { sessionId: session.id } })
 }
 
 function getSessionStatusClass(session) {
@@ -330,11 +348,11 @@ onMounted(() => {
 }
 
 .calendar-day {
-  aspect-ratio: 1;
+  min-height: 80px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  padding: 4px 2px;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
@@ -377,33 +395,55 @@ onMounted(() => {
   color: #1E293B;
 }
 
-.session-dots {
+.session-times {
   display: flex;
+  flex-direction: column;
   gap: 2px;
   margin-top: 4px;
+  width: 100%;
+  align-items: center;
 }
 
-.session-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #059669;
+.session-time-chip {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #D1FAE5;
+  color: #059669;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.session-dot.status-scheduled {
-  background: #059669;
+.session-time-chip:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-.session-dot.status-in-progress {
-  background: #F59E0B;
+.session-time-chip.status-scheduled {
+  background: #DBEAFE;
+  color: #2563EB;
 }
 
-.session-dot.status-completed {
-  background: #10B981;
+.session-time-chip.status-in-progress {
+  background: #FEF3C7;
+  color: #D97706;
 }
 
-.session-dot.status-cancelled {
-  background: #9CA3AF;
+.session-time-chip.status-completed {
+  background: #D1FAE5;
+  color: #059669;
+}
+
+.session-time-chip.status-cancelled {
+  background: #F3F4F6;
+  color: #9CA3AF;
+}
+
+.more-sessions {
+  font-size: 0.6rem;
+  color: #64748B;
+  font-weight: 500;
 }
 
 .sessions-card {
@@ -459,16 +499,21 @@ onMounted(() => {
   }
 
   .calendar-day {
-    padding: 4px;
+    min-height: 70px;
+    padding: 2px 1px;
   }
 
   .day-number {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
   }
 
-  .session-dot {
-    width: 4px;
-    height: 4px;
+  .session-time-chip {
+    font-size: 0.55rem;
+    padding: 1px 4px;
+  }
+
+  .more-sessions {
+    font-size: 0.5rem;
   }
 }
 </style>

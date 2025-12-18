@@ -347,8 +347,21 @@ async function loadUpcomingSessions() {
 
   try {
     const response = await apiClient.get(`/clubs/${selectedClub.value.id}/sessions`)
-    upcomingSessions.value = response.data.slice(0, 5)
-    stats.value.totalSessions = response.data.length
+    const allSessions = response.data
+    stats.value.totalSessions = allSessions.length
+
+    // 오늘 날짜 기준으로 미래 일정만 필터링
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    upcomingSessions.value = allSessions
+      .filter(session => {
+        const sessionDate = new Date(session.date)
+        sessionDate.setHours(0, 0, 0, 0)
+        return sessionDate >= today
+      })
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .slice(0, 5)
   } catch (error) {
     console.error('일정 로드 실패:', error)
   }
