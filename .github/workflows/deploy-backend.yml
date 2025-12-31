@@ -30,19 +30,47 @@ jobs:
             if [ -f .env.production ]; then
               cp .env.production .env
               echo "Using .env.production"
+            else
+              echo "⚠️ .env.production not found, using existing .env"
+            fi
+
+            # Verify environment configuration
+            echo "Checking environment configuration..."
+            if grep -q "USE_AWS_SSM=true" .env 2>/dev/null; then
+              echo "✅ SSM mode enabled"
+              # Verify SSM access
+              if aws ssm get-parameter --name "/ssos/prod/database_url" --region ap-northeast-2 --query "Parameter.Name" --output text 2>/dev/null; then
+                echo "✅ SSM access verified"
+              else
+                echo "⚠️ SSM access may not be configured (EC2 IAM Role required)"
+              fi
+            else
+              echo "ℹ️ Using local environment variables"
             fi
 
             # Install dependencies
             poetry install --only main --no-root
 
-            # Run migrations (upgrade for existing DB, init-db for new DB)
+            # Run migrations with proper error handling
             echo "Running database migrations..."
-            if poetry run aerich upgrade 2>/dev/null; then
+            MIGRATION_OUTPUT=$(poetry run aerich upgrade 2>&1) || true
+            MIGRATION_EXIT=$?
+            echo "$MIGRATION_OUTPUT"
+
+            if echo "$MIGRATION_OUTPUT" | grep -q "No upgrade items found"; then
+              echo "✅ Database is up to date"
+            elif echo "$MIGRATION_OUTPUT" | grep -q "Success upgrade"; then
               echo "✅ Migrations applied successfully"
-            elif poetry run aerich init-db 2>/dev/null; then
-              echo "✅ Database initialized successfully"
+            elif [ $MIGRATION_EXIT -ne 0 ]; then
+              echo "⚠️ Migration warning, attempting init-db..."
+              if poetry run aerich init-db 2>&1; then
+                echo "✅ Database initialized successfully"
+              else
+                echo "❌ Migration failed! Check database connection and credentials."
+                exit 1
+              fi
             else
-              echo "ℹ️ No pending migrations or already up to date"
+              echo "✅ Migrations completed"
             fi
 
             # systemd 서비스 파일 생성 (없으면)
