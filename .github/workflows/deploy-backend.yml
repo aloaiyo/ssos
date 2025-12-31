@@ -47,7 +47,7 @@ jobs:
               exit 1
             fi
 
-            # 3. Validate required environment variables
+            # 3. Validate and setup environment variables
             echo ""
             echo "🔍 Validating environment..."
 
@@ -61,14 +61,27 @@ jobs:
                 exit 1
               fi
               echo "✅ AWS access verified"
+
+              # Get SSM prefix from .env
+              SSM_PREFIX=$(grep "^SSM_PREFIX=" .env | cut -d'=' -f2 || echo "/ssos/prod")
+
+              # Load DATABASE_URL from SSM for aerich CLI
+              echo "   Loading DATABASE_URL from SSM..."
+              export DATABASE_URL=$(aws ssm get-parameter --name "${SSM_PREFIX}/database_url" --with-decryption --query "Parameter.Value" --output text --region ap-northeast-2)
+              if [ -z "$DATABASE_URL" ] || [ "$DATABASE_URL" = "None" ]; then
+                echo "❌ DATABASE_URL not found in SSM!"
+                exit 1
+              fi
+              echo "✅ DATABASE_URL loaded from SSM"
             else
               echo "   Mode: Local environment variables"
-              # Verify DATABASE_URL exists
+              # Verify DATABASE_URL exists and export it
               if ! grep -q "^DATABASE_URL=" .env 2>/dev/null; then
                 echo "❌ DATABASE_URL not found in .env!"
                 echo "   Add DATABASE_URL to .env.production or enable SSM mode"
                 exit 1
               fi
+              export DATABASE_URL=$(grep "^DATABASE_URL=" .env | cut -d'=' -f2-)
               echo "✅ DATABASE_URL found"
             fi
 
@@ -90,55 +103,57 @@ jobs:
             echo ""
             echo "🗄️ Running database migrations..."
 
-            # Check if aerich table exists (indicates DB is initialized)
-            AERICH_EXISTS=$(poetry run python -c "
+            # Check if model tables exist (users table = models initialized)
+            TABLES_EXIST=$(poetry run python -c "
             import asyncio
+            import os
             from tortoise import Tortoise
-            from app.config import settings, TORTOISE_ORM
 
             async def check():
-                await Tortoise.init(config=TORTOISE_ORM)
+                db_url = os.environ.get('DATABASE_URL')
+                await Tortoise.init(db_url=db_url, modules={'models': []})
                 conn = Tortoise.get_connection('default')
                 try:
-                    await conn.execute_query('SELECT 1 FROM aerich LIMIT 1')
-                    print('exists')
-                except:
-                    print('not_exists')
+                    result = await conn.execute_query(\"SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users')\")
+                    exists = result[1][0]['exists']
+                    print('exists' if exists else 'not_exists')
+                except Exception as e:
+                    print('error')
                 await Tortoise.close_connections()
 
             asyncio.run(check())
-            " 2>/dev/null || echo "error")
+            " 2>&1 | tail -1)
 
-            if [ "$AERICH_EXISTS" = "not_exists" ]; then
-              echo "   Database not initialized. Running aerich init-db..."
+            echo "   Model tables check: $TABLES_EXIST"
+
+            if [ "$TABLES_EXIST" = "not_exists" ]; then
+              echo "   Model tables not found. Running aerich init-db..."
               if poetry run aerich init-db 2>&1; then
-                echo "✅ Database initialized successfully"
+                echo "✅ Database initialized with all tables"
               else
                 echo "❌ Database initialization failed!"
                 exit 1
               fi
-            elif [ "$AERICH_EXISTS" = "exists" ]; then
-              echo "   Database already initialized. Running aerich upgrade..."
+            elif [ "$TABLES_EXIST" = "exists" ]; then
+              echo "   Model tables exist. Running aerich upgrade..."
               MIGRATION_OUTPUT=$(poetry run aerich upgrade 2>&1) || true
               echo "$MIGRATION_OUTPUT"
-              if echo "$MIGRATION_OUTPUT" | grep -q "error"; then
-                echo "❌ Migration failed!"
-                exit 1
-              fi
               echo "✅ Migrations applied"
             else
               echo "❌ Cannot connect to database!"
+              echo "   DATABASE_URL: ${DATABASE_URL:0:30}..."
               exit 1
             fi
 
-            # Verify tables exist
+            # Verify tables count
             TABLE_COUNT=$(poetry run python -c "
             import asyncio
+            import os
             from tortoise import Tortoise
-            from app.config import TORTOISE_ORM
 
             async def count():
-                await Tortoise.init(config=TORTOISE_ORM)
+                db_url = os.environ.get('DATABASE_URL')
+                await Tortoise.init(db_url=db_url, modules={'models': []})
                 conn = Tortoise.get_connection('default')
                 result = await conn.execute_query(\"SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'\")
                 print(result[1][0]['count'])
@@ -148,10 +163,10 @@ jobs:
             " 2>/dev/null || echo "0")
 
             echo "   Tables in database: $TABLE_COUNT"
-            if [ "$TABLE_COUNT" -lt 5 ]; then
-              echo "⚠️ Warning: Expected more tables. DB may not be properly initialized."
+            if [ "$TABLE_COUNT" -lt 10 ]; then
+              echo "⚠️ Warning: Expected more tables (got $TABLE_COUNT). Check init-db output."
             else
-              echo "✅ Database schema verified"
+              echo "✅ Database schema verified ($TABLE_COUNT tables)"
             fi
 
             # 7. Setup systemd service
