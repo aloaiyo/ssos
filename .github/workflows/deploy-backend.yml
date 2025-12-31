@@ -47,10 +47,12 @@ jobs:
 
             # Restart uvicorn (기존 프로세스 종료 후 재시작)
             pkill -f "uvicorn app.main:app" || true
-            sleep 1
+            sleep 2
 
-            # setsid로 새 세션에서 실행하여 SSH 종료 시에도 유지
-            setsid poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 > /tmp/uvicorn.log 2>&1 < /dev/null &
+            # 완전히 분리된 프로세스로 실행
+            cd ~/ssos/backend
+            nohup bash -c 'poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000' > /tmp/uvicorn.log 2>&1 &
+            disown -a
 
             sleep 5
 
