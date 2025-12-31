@@ -30,16 +30,13 @@ export const useClubStore = defineStore('club', () => {
    * 내 동호회 목록 조회
    */
   async function fetchClubs() {
-    // 토큰이 없으면 요청하지 않음
-    const token = localStorage.getItem('token')
-    if (!token) return
-
     isLoading.value = true
     error.value = null
 
     try {
       const response = await clubsApi.getMyClubs()
-      clubs.value = response.data
+      // API 응답이 배열인지 확인
+      clubs.value = Array.isArray(response.data) ? response.data : []
     } catch (err) {
       error.value = err.response?.data?.detail || '동호회 목록을 불러오는데 실패했습니다.'
       throw err
@@ -52,16 +49,13 @@ export const useClubStore = defineStore('club', () => {
    * 전체 동호회 목록 조회 (검색용)
    */
   async function searchClubs(search = null) {
-    const token = localStorage.getItem('token')
-    if (!token) return []
-
     try {
       const params = {}
       if (search) {
         params.search = search
       }
       const response = await clubsApi.getClubs(params)
-      return response.data
+      return Array.isArray(response.data) ? response.data : []
     } catch (err) {
       error.value = err.response?.data?.detail || '동호회 목록을 불러오는데 실패했습니다.'
       throw err

@@ -79,10 +79,13 @@ async def create_club(
     # 생성자를 관리자로 추가
     from app.models.member import ClubMember, MemberRole, MemberStatus, Gender
 
-    # 필수 필드 기본값 설정 (추후 입력받을 수 있음)
-    gender = Gender.MALE if current_user.gender == 'M' else Gender.FEMALE
-    if not current_user.gender:
-        gender = Gender.MALE # 기본값
+    # 사용자 성별을 ClubMember 성별로 변환
+    if current_user.gender == 'male':
+        gender = Gender.MALE
+    elif current_user.gender == 'female':
+        gender = Gender.FEMALE
+    else:
+        gender = Gender.MALE  # 기본값
 
     await ClubMember.create(
         club=club,
@@ -131,11 +134,14 @@ async def join_club(
                 detail="이미 가입된 동호회입니다"
             )
         
-    # 필수 필드 기본값 설정
-    gender = Gender.MALE if current_user.gender == 'M' else Gender.FEMALE
-    if not current_user.gender:
-        gender = Gender.MALE # 기본값
-        
+    # 사용자 성별을 ClubMember 성별로 변환
+    if current_user.gender == 'male':
+        gender = Gender.MALE
+    elif current_user.gender == 'female':
+        gender = Gender.FEMALE
+    else:
+        gender = Gender.MALE  # 기본값
+
     # 신규 가입 (Active)
     await ClubMember.create(
         club=club,
