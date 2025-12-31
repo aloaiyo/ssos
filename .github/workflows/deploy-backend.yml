@@ -45,20 +45,38 @@ jobs:
               echo "ℹ️ No pending migrations or already up to date"
             fi
 
-            # Restart uvicorn (기존 프로세스 종료 후 재시작)
-            pkill -f "uvicorn app.main:app" || true
-            sleep 2
+            # systemd 서비스 파일 생성 (없으면)
+            if [ ! -f /etc/systemd/system/ssos-backend.service ]; then
+              sudo tee /etc/systemd/system/ssos-backend.service > /dev/null <<'SYSTEMD'
+            [Unit]
+            Description=SSOS Backend API
+            After=network.target
 
-            # 완전히 분리된 프로세스로 실행
-            cd ~/ssos/backend
-            nohup bash -c 'poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000' > /tmp/uvicorn.log 2>&1 &
-            disown -a
+            [Service]
+            Type=simple
+            User=ubuntu
+            WorkingDirectory=/home/ubuntu/ssos/backend
+            Environment="PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin"
+            ExecStart=/home/ubuntu/.local/bin/poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
+            Restart=always
+            RestartSec=3
 
-            sleep 5
+            [Install]
+            WantedBy=multi-user.target
+            SYSTEMD
+              sudo systemctl daemon-reload
+              sudo systemctl enable ssos-backend
+              echo "✅ systemd service created"
+            fi
+
+            # 서비스 재시작
+            sudo systemctl restart ssos-backend
+            sleep 3
 
             # Verify server is running
-            if curl -s http://localhost:8000/docs > /dev/null; then
+            if sudo systemctl is-active --quiet ssos-backend && curl -s http://localhost:8000/docs > /dev/null; then
               echo "✅ Backend deployment completed!"
             else
-              echo "⚠️ Server may not be running properly, check /tmp/uvicorn.log"
+              echo "⚠️ Service status:"
+              sudo systemctl status ssos-backend --no-pager
             fi
