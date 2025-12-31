@@ -103,6 +103,27 @@ jobs:
             if sudo systemctl is-active --quiet ssos-backend && curl -s http://localhost:8000/docs > /dev/null; then
               echo "✅ Backend deployment completed!"
             else
-              echo "⚠️ Service status:"
-              sudo systemctl status ssos-backend --no-pager
+              echo "⚠️ Service failed to start. Debugging info:"
+              echo ""
+              echo "=== systemctl status ==="
+              sudo systemctl status ssos-backend --no-pager || true
+              echo ""
+              echo "=== journalctl logs (last 30 lines) ==="
+              sudo journalctl -u ssos-backend -n 30 --no-pager || true
+              echo ""
+              echo "=== .env file check (non-sensitive) ==="
+              grep -E "^(USE_AWS_SSM|DEBUG|SSM_PREFIX)=" .env 2>/dev/null || echo "No .env or missing keys"
+              echo ""
+              echo "=== Test uvicorn directly ==="
+              cd ~/ssos/backend
+              poetry run python -c "from app.main import app; print('✅ App imports OK')" 2>&1 || echo "❌ App import failed"
+              echo ""
+              echo "=== Test database connection ==="
+              poetry run python -c "
+            import asyncio
+            from app.config import settings
+            print(f'DATABASE_URL set: {bool(settings.DATABASE_URL)}')
+            print(f'USE_AWS_SSM: {settings.USE_AWS_SSM}')
+            " 2>&1 || echo "❌ Config load failed"
+              exit 1
             fi
