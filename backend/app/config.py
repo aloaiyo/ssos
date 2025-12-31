@@ -77,11 +77,36 @@ class Settings(BaseSettings):
             if secret_key:
                 self.SECRET_KEY = secret_key
                 
-            # Cognito Client Secret
-            client_secret = get_ssm_parameter(f"{self.SSM_PREFIX}/cognito_client_secret")
-            if client_secret:
-                self.COGNITO_CLIENT_SECRET = client_secret
-                
+            # Cognito 설정
+            cognito_user_pool_id = get_ssm_parameter(f"{self.SSM_PREFIX}/cognito_user_pool_id")
+            if cognito_user_pool_id:
+                self.COGNITO_USER_POOL_ID = cognito_user_pool_id
+
+            cognito_client_id = get_ssm_parameter(f"{self.SSM_PREFIX}/cognito_client_id")
+            if cognito_client_id:
+                self.COGNITO_CLIENT_ID = cognito_client_id
+
+            cognito_client_secret = get_ssm_parameter(f"{self.SSM_PREFIX}/cognito_client_secret")
+            if cognito_client_secret:
+                self.COGNITO_CLIENT_SECRET = cognito_client_secret
+
+            cognito_domain = get_ssm_parameter(f"{self.SSM_PREFIX}/cognito_domain")
+            if cognito_domain:
+                self.COGNITO_DOMAIN = cognito_domain
+
+            cognito_redirect_uri = get_ssm_parameter(f"{self.SSM_PREFIX}/cognito_redirect_uri")
+            if cognito_redirect_uri:
+                self.COGNITO_REDIRECT_URI = cognito_redirect_uri
+
+            cognito_sign_out_uri = get_ssm_parameter(f"{self.SSM_PREFIX}/cognito_sign_out_uri")
+            if cognito_sign_out_uri:
+                self.COGNITO_SIGN_OUT_URI = cognito_sign_out_uri
+
+            # CORS
+            cors_origins = get_ssm_parameter(f"{self.SSM_PREFIX}/cors_origins")
+            if cors_origins:
+                self.CORS_ORIGINS = cors_origins
+
             print("SSM 설정 로드 완료")
 
     @property
