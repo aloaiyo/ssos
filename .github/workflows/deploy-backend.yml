@@ -198,7 +198,15 @@ jobs:
             # 8. Restart service
             echo ""
             echo "🔄 Restarting service..."
-            sudo systemctl restart ssos-backend
+
+            # Stop service and kill any remaining processes on port 8000
+            sudo systemctl stop ssos-backend || true
+            sleep 2
+            sudo lsof -i :8000 -t | xargs -r sudo kill -9 2>/dev/null || true
+            sleep 1
+
+            # Start fresh
+            sudo systemctl start ssos-backend
 
             # 9. Wait and verify
             echo ""
