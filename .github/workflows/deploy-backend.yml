@@ -75,24 +75,24 @@ jobs:
 
             # systemd 서비스 파일 생성/업데이트
             echo "Setting up systemd service..."
-            sudo tee /etc/systemd/system/ssos-backend.service > /dev/null << 'EOF'
-            [Unit]
-            Description=SSOS Backend API
-            After=network.target
+            cat << 'SERVICEEOF' | sudo tee /etc/systemd/system/ssos-backend.service > /dev/null
+[Unit]
+Description=SSOS Backend API
+After=network.target
 
-            [Service]
-            Type=simple
-            User=ubuntu
-            WorkingDirectory=/home/ubuntu/ssos/backend
-            Environment="PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin"
-            EnvironmentFile=/home/ubuntu/ssos/backend/.env
-            ExecStart=/home/ubuntu/.local/bin/poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
-            Restart=always
-            RestartSec=3
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/ssos/backend
+Environment="PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/home/ubuntu/ssos/backend/.env
+ExecStart=/home/ubuntu/.local/bin/poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
 
-            [Install]
-            WantedBy=multi-user.target
-            EOF
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
             sudo systemctl daemon-reload
             sudo systemctl enable ssos-backend
             echo "✅ systemd service configured"
