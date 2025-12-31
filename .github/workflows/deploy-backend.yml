@@ -6,7 +6,7 @@ on:
     paths:
       - 'backend/**'
       - '.github/workflows/deploy-backend.yml'
-  workflow_dispatch:  # 수동 실행 가능
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -38,7 +38,6 @@ jobs:
             echo "Checking environment configuration..."
             if grep -q "USE_AWS_SSM=true" .env 2>/dev/null; then
               echo "✅ SSM mode enabled"
-              # Verify SSM access
               if aws ssm get-parameter --name "/ssos/prod/database_url" --region ap-northeast-2 --query "Parameter.Name" --output text 2>/dev/null; then
                 echo "✅ SSM access verified"
               else
@@ -75,24 +74,23 @@ jobs:
 
             # systemd 서비스 파일 생성/업데이트
             echo "Setting up systemd service..."
-            cat << 'SERVICEEOF' | sudo tee /etc/systemd/system/ssos-backend.service > /dev/null
-[Unit]
-Description=SSOS Backend API
-After=network.target
-
-[Service]
-Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/ssos/backend
-Environment="PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin"
-EnvironmentFile=/home/ubuntu/ssos/backend/.env
-ExecStart=/home/ubuntu/.local/bin/poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-SERVICEEOF
+            printf '%s\n' \
+              '[Unit]' \
+              'Description=SSOS Backend API' \
+              'After=network.target' \
+              '' \
+              '[Service]' \
+              'Type=simple' \
+              'User=ubuntu' \
+              'WorkingDirectory=/home/ubuntu/ssos/backend' \
+              'Environment="PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin"' \
+              'EnvironmentFile=/home/ubuntu/ssos/backend/.env' \
+              'ExecStart=/home/ubuntu/.local/bin/poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000' \
+              'Restart=always' \
+              'RestartSec=3' \
+              '' \
+              '[Install]' \
+              'WantedBy=multi-user.target' | sudo tee /etc/systemd/system/ssos-backend.service > /dev/null
             sudo systemctl daemon-reload
             sudo systemctl enable ssos-backend
             echo "✅ systemd service configured"
