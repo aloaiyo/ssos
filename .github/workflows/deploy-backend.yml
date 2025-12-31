@@ -89,14 +89,69 @@ jobs:
             # 6. Run migrations
             echo ""
             echo "🗄️ Running database migrations..."
-            MIGRATION_OUTPUT=$(poetry run aerich upgrade 2>&1) || true
-            echo "$MIGRATION_OUTPUT"
 
-            if echo "$MIGRATION_OUTPUT" | grep -qE "(No upgrade items found|Success)"; then
-              echo "✅ Database is ready"
-            elif echo "$MIGRATION_OUTPUT" | grep -q "error"; then
-              echo "❌ Migration failed!"
+            # Check if aerich table exists (indicates DB is initialized)
+            AERICH_EXISTS=$(poetry run python -c "
+            import asyncio
+            from tortoise import Tortoise
+            from app.config import settings, TORTOISE_ORM
+
+            async def check():
+                await Tortoise.init(config=TORTOISE_ORM)
+                conn = Tortoise.get_connection('default')
+                try:
+                    await conn.execute_query('SELECT 1 FROM aerich LIMIT 1')
+                    print('exists')
+                except:
+                    print('not_exists')
+                await Tortoise.close_connections()
+
+            asyncio.run(check())
+            " 2>/dev/null || echo "error")
+
+            if [ "$AERICH_EXISTS" = "not_exists" ]; then
+              echo "   Database not initialized. Running aerich init-db..."
+              if poetry run aerich init-db 2>&1; then
+                echo "✅ Database initialized successfully"
+              else
+                echo "❌ Database initialization failed!"
+                exit 1
+              fi
+            elif [ "$AERICH_EXISTS" = "exists" ]; then
+              echo "   Database already initialized. Running aerich upgrade..."
+              MIGRATION_OUTPUT=$(poetry run aerich upgrade 2>&1) || true
+              echo "$MIGRATION_OUTPUT"
+              if echo "$MIGRATION_OUTPUT" | grep -q "error"; then
+                echo "❌ Migration failed!"
+                exit 1
+              fi
+              echo "✅ Migrations applied"
+            else
+              echo "❌ Cannot connect to database!"
               exit 1
+            fi
+
+            # Verify tables exist
+            TABLE_COUNT=$(poetry run python -c "
+            import asyncio
+            from tortoise import Tortoise
+            from app.config import TORTOISE_ORM
+
+            async def count():
+                await Tortoise.init(config=TORTOISE_ORM)
+                conn = Tortoise.get_connection('default')
+                result = await conn.execute_query(\"SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'\")
+                print(result[1][0]['count'])
+                await Tortoise.close_connections()
+
+            asyncio.run(count())
+            " 2>/dev/null || echo "0")
+
+            echo "   Tables in database: $TABLE_COUNT"
+            if [ "$TABLE_COUNT" -lt 5 ]; then
+              echo "⚠️ Warning: Expected more tables. DB may not be properly initialized."
+            else
+              echo "✅ Database schema verified"
             fi
 
             # 7. Setup systemd service
