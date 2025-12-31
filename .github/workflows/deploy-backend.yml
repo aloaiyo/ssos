@@ -20,60 +20,88 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e  # 에러 발생 시 즉시 중단
             export PATH="$HOME/.local/bin:$PATH"
+
+            echo "========================================="
+            echo "🚀 Starting deployment..."
+            echo "========================================="
+
             cd ~/ssos/backend
 
-            # Pull latest code
+            # 1. Pull latest code
+            echo ""
+            echo "📥 Pulling latest code..."
             git pull origin main
 
-            # Copy production env if exists
+            # 2. Setup environment
+            echo ""
+            echo "⚙️ Setting up environment..."
             if [ -f .env.production ]; then
               cp .env.production .env
-              echo "Using .env.production"
+              echo "✅ Using .env.production"
             else
-              echo "⚠️ .env.production not found, using existing .env"
+              echo "❌ .env.production not found!"
+              echo "   Create .env.production with required settings:"
+              echo "   - DATABASE_URL or USE_AWS_SSM=true"
+              exit 1
             fi
 
-            # Verify environment configuration
-            echo "Checking environment configuration..."
+            # 3. Validate required environment variables
+            echo ""
+            echo "🔍 Validating environment..."
+
+            # Check if using SSM or local env
             if grep -q "USE_AWS_SSM=true" .env 2>/dev/null; then
-              echo "✅ SSM mode enabled"
-              if aws ssm get-parameter --name "/ssos/prod/database_url" --region ap-northeast-2 --query "Parameter.Name" --output text 2>/dev/null; then
-                echo "✅ SSM access verified"
-              else
-                echo "⚠️ SSM access may not be configured (EC2 IAM Role required)"
-              fi
-            else
-              echo "ℹ️ Using local environment variables"
-            fi
-
-            # Install dependencies
-            poetry install --only main --no-root
-
-            # Run migrations with proper error handling
-            echo "Running database migrations..."
-            MIGRATION_OUTPUT=$(poetry run aerich upgrade 2>&1) || true
-            MIGRATION_EXIT=$?
-            echo "$MIGRATION_OUTPUT"
-
-            if echo "$MIGRATION_OUTPUT" | grep -q "No upgrade items found"; then
-              echo "✅ Database is up to date"
-            elif echo "$MIGRATION_OUTPUT" | grep -q "Success upgrade"; then
-              echo "✅ Migrations applied successfully"
-            elif [ $MIGRATION_EXIT -ne 0 ]; then
-              echo "⚠️ Migration warning, attempting init-db..."
-              if poetry run aerich init-db 2>&1; then
-                echo "✅ Database initialized successfully"
-              else
-                echo "❌ Migration failed! Check database connection and credentials."
+              echo "   Mode: AWS SSM Parameter Store"
+              # Verify SSM access
+              if ! aws sts get-caller-identity --region ap-northeast-2 > /dev/null 2>&1; then
+                echo "❌ EC2 cannot access AWS. IAM Role required!"
+                echo "   Attach IAM Role with AmazonSSMReadOnlyAccess to EC2 instance"
                 exit 1
               fi
+              echo "✅ AWS access verified"
             else
-              echo "✅ Migrations completed"
+              echo "   Mode: Local environment variables"
+              # Verify DATABASE_URL exists
+              if ! grep -q "^DATABASE_URL=" .env 2>/dev/null; then
+                echo "❌ DATABASE_URL not found in .env!"
+                echo "   Add DATABASE_URL to .env.production or enable SSM mode"
+                exit 1
+              fi
+              echo "✅ DATABASE_URL found"
             fi
 
-            # systemd 서비스 파일 생성/업데이트
-            echo "Setting up systemd service..."
+            # 4. Install dependencies
+            echo ""
+            echo "📦 Installing dependencies..."
+            poetry install --only main --no-root
+
+            # 5. Test app can start
+            echo ""
+            echo "🧪 Testing application..."
+            if ! poetry run python -c "from app.main import app; print('✅ App imports OK')"; then
+              echo "❌ Application failed to import!"
+              echo "   Check for syntax errors or missing dependencies"
+              exit 1
+            fi
+
+            # 6. Run migrations
+            echo ""
+            echo "🗄️ Running database migrations..."
+            MIGRATION_OUTPUT=$(poetry run aerich upgrade 2>&1) || true
+            echo "$MIGRATION_OUTPUT"
+
+            if echo "$MIGRATION_OUTPUT" | grep -qE "(No upgrade items found|Success)"; then
+              echo "✅ Database is ready"
+            elif echo "$MIGRATION_OUTPUT" | grep -q "error"; then
+              echo "❌ Migration failed!"
+              exit 1
+            fi
+
+            # 7. Setup systemd service
+            echo ""
+            echo "🔧 Configuring systemd service..."
             printf '%s\n' \
               '[Unit]' \
               'Description=SSOS Backend API' \
@@ -88,6 +116,8 @@ jobs:
               'ExecStart=/home/ubuntu/.local/bin/poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000' \
               'Restart=always' \
               'RestartSec=3' \
+              'StandardOutput=journal' \
+              'StandardError=journal' \
               '' \
               '[Install]' \
               'WantedBy=multi-user.target' | sudo tee /etc/systemd/system/ssos-backend.service > /dev/null
@@ -95,35 +125,47 @@ jobs:
             sudo systemctl enable ssos-backend
             echo "✅ systemd service configured"
 
-            # 서비스 재시작
+            # 8. Restart service
+            echo ""
+            echo "🔄 Restarting service..."
             sudo systemctl restart ssos-backend
-            sleep 3
 
-            # Verify server is running
-            if sudo systemctl is-active --quiet ssos-backend && curl -s http://localhost:8000/docs > /dev/null; then
-              echo "✅ Backend deployment completed!"
+            # 9. Wait and verify
+            echo ""
+            echo "⏳ Waiting for service to start..."
+            sleep 5
+
+            # Check service status
+            if sudo systemctl is-active --quiet ssos-backend; then
+              echo "✅ Service is running"
+
+              # Health check
+              for i in 1 2 3; do
+                if curl -sf http://localhost:8000/docs > /dev/null 2>&1; then
+                  echo ""
+                  echo "========================================="
+                  echo "✅ Deployment completed successfully!"
+                  echo "========================================="
+                  exit 0
+                fi
+                echo "   Attempt $i/3: Waiting for API..."
+                sleep 2
+              done
+
+              echo "⚠️ Service running but API not responding"
             else
-              echo "⚠️ Service failed to start. Debugging info:"
-              echo ""
-              echo "=== systemctl status ==="
-              sudo systemctl status ssos-backend --no-pager || true
-              echo ""
-              echo "=== journalctl logs (last 30 lines) ==="
-              sudo journalctl -u ssos-backend -n 30 --no-pager || true
-              echo ""
-              echo "=== .env file check (non-sensitive) ==="
-              grep -E "^(USE_AWS_SSM|DEBUG|SSM_PREFIX)=" .env 2>/dev/null || echo "No .env or missing keys"
-              echo ""
-              echo "=== Test uvicorn directly ==="
-              cd ~/ssos/backend
-              poetry run python -c "from app.main import app; print('✅ App imports OK')" 2>&1 || echo "❌ App import failed"
-              echo ""
-              echo "=== Test database connection ==="
-              poetry run python -c "
-            import asyncio
-            from app.config import settings
-            print(f'DATABASE_URL set: {bool(settings.DATABASE_URL)}')
-            print(f'USE_AWS_SSM: {settings.USE_AWS_SSM}')
-            " 2>&1 || echo "❌ Config load failed"
-              exit 1
+              echo "❌ Service failed to start"
             fi
+
+            # Debug info on failure
+            echo ""
+            echo "========================================="
+            echo "❌ Deployment failed. Debug info:"
+            echo "========================================="
+            echo ""
+            echo "--- Service Status ---"
+            sudo systemctl status ssos-backend --no-pager || true
+            echo ""
+            echo "--- Recent Logs ---"
+            sudo journalctl -u ssos-backend -n 50 --no-pager || true
+            exit 1
