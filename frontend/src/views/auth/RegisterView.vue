@@ -10,13 +10,77 @@
                 <router-link to="/" class="logo-link">
                   <v-icon size="56" color="primary" class="mb-3">mdi-tennis</v-icon>
                 </router-link>
-                <h1 class="text-h5 font-weight-bold text-primary mb-1">회원가입</h1>
+                <h1 class="text-h5 font-weight-bold text-primary mb-1">
+                  {{ showEmailForm ? '회원가입' : '시작하기' }}
+                </h1>
                 <p class="text-body-2 text-medium-emphasis">테니스 동호회 관리를 시작하세요</p>
               </div>
             </v-card-title>
 
             <v-card-text class="px-8 pb-8">
-              <v-form ref="registerForm" v-model="valid" @submit.prevent="handleRegister">
+              <!-- 가입 방법 선택 화면 -->
+              <div v-if="!showEmailForm">
+                <!-- 구글로 시작하기 -->
+                <v-btn
+                  :loading="isGoogleLoading"
+                  color="white"
+                  size="x-large"
+                  block
+                  rounded="lg"
+                  class="mb-4 google-btn"
+                  elevation="2"
+                  @click="handleGoogleSignup"
+                >
+                  <img
+                    src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                    alt="Google"
+                    class="google-icon mr-3"
+                  />
+                  <span class="text-body-1 font-weight-medium">Google로 시작하기</span>
+                </v-btn>
+
+                <p class="text-center text-caption text-medium-emphasis mb-4">
+                  구글 계정으로 간편하게 시작하세요
+                </p>
+
+                <!-- 구분선 -->
+                <div class="divider-container mb-4">
+                  <v-divider />
+                  <span class="divider-text text-medium-emphasis">또는</span>
+                  <v-divider />
+                </div>
+
+                <!-- 이메일로 시작하기 -->
+                <v-btn
+                  color="primary"
+                  size="x-large"
+                  block
+                  rounded="lg"
+                  variant="outlined"
+                  class="mb-6"
+                  @click="showEmailForm = true"
+                >
+                  <v-icon start>mdi-email-outline</v-icon>
+                  이메일로 시작하기
+                </v-btn>
+
+                <!-- 구분선 -->
+                <v-divider class="mb-4" />
+
+                <!-- 로그인 링크 -->
+                <div class="text-center">
+                  <span class="text-body-2 text-medium-emphasis">이미 계정이 있으신가요?</span>
+                  <router-link
+                    :to="{ name: 'login' }"
+                    class="text-primary text-decoration-none font-weight-medium ml-1"
+                  >
+                    로그인
+                  </router-link>
+                </div>
+              </div>
+
+              <!-- 이메일 회원가입 폼 -->
+              <v-form v-else ref="registerForm" v-model="valid" @submit.prevent="handleRegister">
                 <!-- 이름 -->
                 <v-text-field
                   v-model="name"
@@ -122,6 +186,18 @@
                   회원가입
                 </v-btn>
 
+                <!-- 뒤로가기 버튼 -->
+                <v-btn
+                  variant="text"
+                  color="primary"
+                  size="small"
+                  class="mb-4"
+                  @click="showEmailForm = false"
+                >
+                  <v-icon start size="small">mdi-arrow-left</v-icon>
+                  다른 방법으로 가입하기
+                </v-btn>
+
                 <!-- 구분선 -->
                 <div class="divider-container mb-4">
                   <v-divider />
@@ -161,6 +237,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { getGoogleLoginUrl } from '@/api/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -173,6 +250,15 @@ const password = ref('')
 const passwordConfirm = ref('')
 const showPassword = ref(false)
 const showPasswordConfirm = ref(false)
+const showEmailForm = ref(false)
+const isGoogleLoading = ref(false)
+
+// 구글 가입 처리
+function handleGoogleSignup() {
+  isGoogleLoading.value = true
+  const googleUrl = getGoogleLoginUrl()
+  window.location.href = googleUrl
+}
 
 // 비밀번호 체크
 const passwordChecks = computed(() => ({
@@ -259,6 +345,22 @@ async function handleRegister() {
 .divider-text {
   font-size: 0.875rem;
   white-space: nowrap;
+}
+
+.google-btn {
+  border: 1px solid #dadce0;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.google-btn:hover {
+  background-color: #f8f9fa !important;
+  border-color: #dadce0;
+}
+
+.google-icon {
+  width: 20px;
+  height: 20px;
 }
 
 .password-requirements {
