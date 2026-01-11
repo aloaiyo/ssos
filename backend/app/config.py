@@ -140,6 +140,7 @@ TORTOISE_ORM = {
                 "app.models.fee",
                 "app.models.schedule",
                 "app.models.guest",
+                "app.models.season",
                 "aerich.models"
             ],
             "default_connection": "default",

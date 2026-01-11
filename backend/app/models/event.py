@@ -19,6 +19,12 @@ class SessionStatus(str, Enum):
     COMPLETED = "completed"
 
 
+class SessionType(str, Enum):
+    """세션 타입 (경기 방식)"""
+    LEAGUE = "league"          # 리그전
+    TOURNAMENT = "tournament"  # 토너먼트
+
+
 class ParticipationType(str, Enum):
     """참가 타입 (경기 종류)"""
     MENS_DOUBLES = "mens_doubles"
@@ -91,7 +97,14 @@ class Session(BaseModel):
     event = fields.ForeignKeyField(
         "models.Event",
         related_name="sessions",
-        on_delete=fields.CASCADE
+        on_delete=fields.CASCADE,
+        null=True  # 시즌에 직접 연결된 세션은 event 없음
+    )
+    season = fields.ForeignKeyField(
+        "models.Season",
+        related_name="sessions",
+        on_delete=fields.CASCADE,
+        null=True  # 시즌 없이 단독 세션 가능
     )
     config = fields.ForeignKeyField(
         "models.SessionConfig",
@@ -99,12 +112,15 @@ class Session(BaseModel):
         on_delete=fields.SET_NULL,
         null=True
     )
+    title = fields.CharField(max_length=200, null=True)  # 세션 제목
     date = fields.DateField()
     start_time = fields.TimeField()
     end_time = fields.TimeField()
+    location = fields.CharField(max_length=300, null=True)  # 장소
     num_courts = fields.IntField()
     match_duration_minutes = fields.IntField()
     break_duration_minutes = fields.IntField(null=True)
+    session_type = fields.CharEnumField(SessionType, default=SessionType.LEAGUE)  # 리그/토너먼트
     status = fields.CharEnumField(SessionStatus, default=SessionStatus.DRAFT)
     created_at = fields.DatetimeField(auto_now_add=True)
 
