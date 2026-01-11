@@ -20,7 +20,7 @@ async def list_rankings(
     limit: int = 100
 ):
     """동호회 랭킹 목록 조회"""
-    club = await Club.get_or_none(id=club_id)
+    club = await Club.get_or_none(id=club_id, is_deleted=False)
     if not club:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

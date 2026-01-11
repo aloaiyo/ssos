@@ -3,7 +3,7 @@
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
-from app.schemas.club import ClubCreate, ClubResponse, ClubUpdate
+from app.schemas.club import ClubCreate, ClubResponse, ClubUpdate, ClubSearchResponse
 from app.schemas.schedule import ScheduleResponse
 from app.models.club import Club
 from app.models.schedule import ClubSchedule
@@ -32,20 +32,58 @@ async def get_club_with_schedules(club: Club) -> dict:
     return club_dict
 
 
-@router.get("", response_model=List[ClubResponse])
+@router.get("", response_model=List[ClubSearchResponse])
 async def list_clubs(
     current_user: User = Depends(get_current_active_user),
     search: str = None,
     skip: int = 0,
-    limit: int = 100
+    limit: int = 20
 ):
-    """동호회 목록 조회"""
+    """
+    동호회 목록 조회
+    - 기본: 최근 생성된 20개 동호회
+    - 검색: 이름에 검색어가 포함된 동호회
+    - 회원수와 내 가입 상태 포함
+    """
+    from app.models.member import ClubMember, MemberStatus
+
     query = Club.filter(is_deleted=False)
     if search:
         query = query.filter(name__icontains=search)
 
-    clubs = await query.offset(skip).limit(limit)
-    return [ClubResponse.model_validate(club) for club in clubs]
+    # 최신순 정렬
+    clubs = await query.order_by("-created_at").offset(skip).limit(limit)
+
+    result = []
+    for club in clubs:
+        # 활성 회원수 조회
+        member_count = await ClubMember.filter(
+            club=club,
+            status=MemberStatus.ACTIVE,
+            is_deleted=False
+        ).count()
+
+        # 내 가입 상태 조회
+        my_membership = await ClubMember.get_or_none(
+            club=club,
+            user=current_user,
+            is_deleted=False
+        )
+        my_status = my_membership.status.value if my_membership else None
+
+        result.append(ClubSearchResponse(
+            id=club.id,
+            name=club.name,
+            description=club.description,
+            created_at=club.created_at,
+            location=club.location,
+            is_join_allowed=club.is_join_allowed,
+            requires_approval=club.requires_approval,
+            member_count=member_count,
+            my_status=my_status
+        ))
+
+    return result
 
 
 @router.post("", response_model=ClubResponse, status_code=status.HTTP_201_CREATED)
@@ -104,18 +142,25 @@ async def join_club(
     current_user: User = Depends(get_current_active_user)
 ):
     """동호회 가입 요청"""
-    club = await Club.get_or_none(id=club_id)
+    club = await Club.get_or_none(id=club_id, is_deleted=False)
     if not club:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="동호회를 찾을 수 없습니다"
         )
-        
+
+    # 가입 허용 여부 확인
+    if not club.is_join_allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="이 동호회는 현재 가입을 받지 않습니다"
+        )
+
     from app.models.member import ClubMember, MemberRole, MemberStatus, Gender
-    
+
     # 이미 가입되어 있는지 확인
     existing_member = await ClubMember.get_or_none(club=club, user=current_user)
-    
+
     if existing_member:
         if existing_member.status == MemberStatus.BANNED:
             raise HTTPException(
@@ -123,17 +168,23 @@ async def join_club(
                 detail="이 동호회에서 추방되었습니다."
             )
         elif existing_member.status == MemberStatus.LEFT:
-            # 재가입 요청 (Pending)
-            existing_member.status = MemberStatus.PENDING
-            existing_member.role = MemberRole.MEMBER
-            await existing_member.save()
-            return {"message": "재가입 요청이 완료되었습니다. 관리자의 승인을 기다려주세요."}
+            # 재가입 요청
+            if club.requires_approval:
+                existing_member.status = MemberStatus.PENDING
+                existing_member.role = MemberRole.MEMBER
+                await existing_member.save()
+                return {"message": "재가입 요청이 완료되었습니다. 관리자의 승인을 기다려주세요."}
+            else:
+                existing_member.status = MemberStatus.ACTIVE
+                existing_member.role = MemberRole.MEMBER
+                await existing_member.save()
+                return {"message": "재가입이 완료되었습니다."}
         elif existing_member.status in [MemberStatus.ACTIVE, MemberStatus.PENDING]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="이미 가입된 동호회입니다"
             )
-        
+
     # 사용자 성별을 ClubMember 성별로 변환
     if current_user.gender == 'male':
         gender = Gender.MALE
@@ -142,16 +193,19 @@ async def join_club(
     else:
         gender = Gender.MALE  # 기본값
 
-    # 신규 가입 (Active)
+    # 승인 필요 여부에 따라 상태 결정
+    initial_status = MemberStatus.PENDING if club.requires_approval else MemberStatus.ACTIVE
+
     await ClubMember.create(
         club=club,
         user=current_user,
         role=MemberRole.MEMBER,
-        status=MemberStatus.ACTIVE,
+        status=initial_status,
         gender=gender,
-
     )
-    
+
+    if club.requires_approval:
+        return {"message": "가입 요청이 완료되었습니다. 관리자의 승인을 기다려주세요."}
     return {"message": "가입이 완료되었습니다"}
 
 
@@ -161,7 +215,7 @@ async def leave_club(
     current_user: User = Depends(get_current_active_user)
 ):
     """동호회 탈퇴"""
-    club = await Club.get_or_none(id=club_id)
+    club = await Club.get_or_none(id=club_id, is_deleted=False)
     if not club:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -190,7 +244,7 @@ async def approve_member(
     current_user: User = Depends(get_current_active_user)
 ):
     """회원 가입 승인 (재가입 등)"""
-    club = await Club.get_or_none(id=club_id)
+    club = await Club.get_or_none(id=club_id, is_deleted=False)
     if not club:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -233,7 +287,7 @@ async def get_club(
     current_user: User = Depends(get_current_active_user)
 ):
     """동호회 상세 조회"""
-    club = await Club.get_or_none(id=club_id)
+    club = await Club.get_or_none(id=club_id, is_deleted=False)
     if not club:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -249,7 +303,7 @@ async def update_club(
     current_user: User = Depends(get_current_active_user)
 ):
     """동호회 수정"""
-    club = await Club.get_or_none(id=club_id)
+    club = await Club.get_or_none(id=club_id, is_deleted=False)
     if not club:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -279,6 +333,11 @@ async def update_club(
         club.default_match_duration = club_data.default_match_duration
     if club_data.location is not None:
         club.location = club_data.location
+    # 가입 설정 수정
+    if club_data.is_join_allowed is not None:
+        club.is_join_allowed = club_data.is_join_allowed
+    if club_data.requires_approval is not None:
+        club.requires_approval = club_data.requires_approval
 
     await club.save()
 

@@ -19,6 +19,9 @@ class ClubCreate(ClubBase):
     default_num_courts: Optional[int] = None
     default_match_duration: Optional[int] = 30
     location: Optional[str] = None
+    # 가입 설정
+    is_join_allowed: bool = True
+    requires_approval: bool = False
     # 정기 활동 스케줄 (여러 요일별 시간)
     schedules: Optional[List[ScheduleCreate]] = None
 
@@ -31,6 +34,9 @@ class ClubUpdate(BaseModel):
     default_num_courts: Optional[int] = None
     default_match_duration: Optional[int] = None
     location: Optional[str] = None
+    # 가입 설정
+    is_join_allowed: Optional[bool] = None
+    requires_approval: Optional[bool] = None
     # 정기 활동 스케줄 (전체 교체)
     schedules: Optional[List[ScheduleCreate]] = None
 
@@ -46,7 +52,25 @@ class ClubResponse(ClubBase):
     default_num_courts: Optional[int] = None
     default_match_duration: Optional[int] = None
     location: Optional[str] = None
+    # 가입 설정
+    is_join_allowed: bool = True
+    requires_approval: bool = False
     # 정기 활동 스케줄
     schedules: List[ScheduleResponse] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ClubSearchResponse(ClubBase):
+    """동호회 검색 응답 스키마 (회원수, 가입상태 포함)"""
+    id: int
+    created_at: datetime
+    location: Optional[str] = None
+    # 가입 설정
+    is_join_allowed: bool = True
+    requires_approval: bool = False
+    # 추가 정보
+    member_count: int = 0
+    my_status: Optional[str] = None  # None, 'active', 'pending', 'left', 'banned'
 
     model_config = ConfigDict(from_attributes=True)

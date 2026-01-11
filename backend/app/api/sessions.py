@@ -1,27 +1,39 @@
 """
 세션 관리 API
 """
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional
 from datetime import date, time
-from pydantic import BaseModel as PydanticBase
+from pydantic import BaseModel as PydanticBase, Field
 from app.models.club import Club
-from app.models.event import Event, Session, SessionParticipant, SessionStatus, EventType, ParticipantCategory, ParticipationType
+from app.models.event import Event, Session, SessionParticipant, SessionStatus, SessionType, EventType, ParticipantCategory, ParticipationType
 from app.models.match import Match, MatchParticipant, MatchResult, MatchType, MatchStatus, Team, ParticipantCategory as MatchParticipantCategory
 from app.models.member import ClubMember, MemberRole, MemberStatus
 from app.models.guest import Guest
 from app.models.user import User
-from app.core.dependencies import get_current_active_user
+from app.models.season import Season
+from app.core.dependencies import (
+    get_current_active_user,
+    require_club_manager,
+    get_club_or_404
+)
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/clubs/{club_id}/sessions", tags=["세션 관리"])
 
 
 class SessionCreate(PydanticBase):
+    """세션 생성 요청"""
+    title: Optional[str] = Field(None, max_length=200)
     date: date
     start_time: time
     end_time: time
-    num_courts: int
-    match_duration_minutes: int = 30
+    location: Optional[str] = Field(None, max_length=200)
+    num_courts: int = Field(..., ge=1, le=20)
+    match_duration_minutes: int = Field(30, ge=10, le=120)
+    session_type: str = Field("league", pattern="^(league|tournament)$")
+    season_id: Optional[int] = None
 
 
 class MatchParticipantData(PydanticBase):
@@ -56,46 +68,65 @@ class ParticipantAdd(PydanticBase):
     participation_type: Optional[str] = None  # mens_doubles, mixed_doubles, singles
 
 
-async def check_manager_permission(club_id: int, current_user: User):
-    """매니저 권한 확인"""
-    club = await Club.get_or_none(id=club_id, is_deleted=False)
-    if not club:
+async def get_session_or_404(session_id: int, club_id: int) -> Session:
+    """세션 조회 또는 404"""
+    session = await Session.get_or_none(id=session_id, is_deleted=False).prefetch_related("event", "season")
+    if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="동호회를 찾을 수 없습니다"
+            detail="세션을 찾을 수 없습니다"
         )
 
-    member = await ClubMember.get_or_none(club_id=club_id, user=current_user, is_deleted=False)
-    if not member or member.role != MemberRole.MANAGER or member.status != MemberStatus.ACTIVE:
+    session_club_id = await get_session_club_id(session)
+    if session_club_id != club_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="권한이 없습니다"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="세션을 찾을 수 없습니다"
         )
-    return club
+    return session
+
+
+async def get_session_club_id(session: Session) -> Optional[int]:
+    """세션의 club_id를 반환 (event 또는 season 통해)"""
+    if session.event:
+        return session.event.club_id
+    elif session.season:
+        return session.season.club_id
+    return None
 
 
 @router.get("")
 async def list_sessions(
     club_id: int,
+    season_id: Optional[int] = None,
     current_user: User = Depends(get_current_active_user)
 ):
     """세션 목록 조회"""
-    club = await Club.get_or_none(id=club_id)
-    if not club:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="동호회를 찾을 수 없습니다"
-        )
-        
-    sessions = await Session.filter(event__club=club).prefetch_related("event", "participants__club_member__user")
-    
+    club = await get_club_or_404(club_id)
+
+    # 시즌 필터링 또는 이벤트 기반 조회
+    if season_id:
+        sessions = await Session.filter(
+            season_id=season_id, is_deleted=False
+        ).prefetch_related("season", "participants__club_member__user").order_by("-date")
+    else:
+        # 기존 이벤트 기반 조회 (하위 호환성)
+        sessions = await Session.filter(
+            event__club=club, is_deleted=False
+        ).prefetch_related("event", "season", "participants__club_member__user").order_by("-date")
+
     return [{
         "id": s.id,
+        "title": s.title,
         "date": s.date.isoformat(),
         "start_time": s.start_time.isoformat(),
         "end_time": s.end_time.isoformat(),
+        "location": s.location,
         "num_courts": s.num_courts,
+        "session_type": s.session_type.value if s.session_type else "league",
         "status": s.status.value,
+        "season_id": s.season_id,
+        "season_name": s.season.name if s.season else None,
         "participant_count": len(s.participants),
     } for s in sessions]
 
@@ -104,37 +135,56 @@ async def list_sessions(
 async def create_session(
     club_id: int,
     session_data: SessionCreate,
-    current_user: User = Depends(get_current_active_user)
+    membership: ClubMember = Depends(require_club_manager)
 ):
     """세션 생성"""
-    club = await check_manager_permission(club_id, current_user)
-    
-    # 기본 이벤트 찾기 또는 생성
-    event = await Event.get_or_none(club=club, event_type=EventType.REGULAR)
-    if not event:
-        event = await Event.create(
-            club=club,
-            title="정기 모임",
-            event_type=EventType.REGULAR
-        )
-    
+
+    # 시즌 확인 (선택사항)
+    season = None
+    if session_data.season_id:
+        season = await Season.get_or_none(id=session_data.season_id, club_id=club_id, is_deleted=False)
+        if not season:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="시즌을 찾을 수 없습니다"
+            )
+
+    # 기본 이벤트 찾기 또는 생성 (시즌이 없는 경우)
+    event = None
+    if not season:
+        event = await Event.get_or_none(club_id=club_id, event_type=EventType.REGULAR)
+        if not event:
+            event = await Event.create(
+                club_id=club_id,
+                title="정기 모임",
+                event_type=EventType.REGULAR
+            )
+
     session = await Session.create(
         event=event,
+        season=season,
+        title=session_data.title,
         date=session_data.date,
         start_time=session_data.start_time,
         end_time=session_data.end_time,
+        location=session_data.location,
         num_courts=session_data.num_courts,
         match_duration_minutes=session_data.match_duration_minutes,
+        session_type=SessionType(session_data.session_type),
         status=SessionStatus.CONFIRMED
     )
-    
+
     return {
         "id": session.id,
+        "title": session.title,
         "date": session.date.isoformat(),
         "start_time": session.start_time.isoformat(),
         "end_time": session.end_time.isoformat(),
+        "location": session.location,
         "num_courts": session.num_courts,
+        "session_type": session.session_type.value,
         "status": session.status.value,
+        "season_id": session.season_id,
     }
 
 
@@ -145,8 +195,13 @@ async def get_session(
     current_user: User = Depends(get_current_active_user)
 ):
     """세션 상세 조회 (참가자 포함)"""
-    session = await Session.get_or_none(id=session_id).prefetch_related(
+    # 기본 세션 검증
+    await get_session_or_404(session_id, club_id)
+
+    # 전체 데이터 prefetch
+    session = await Session.get(id=session_id).prefetch_related(
         "event",
+        "season",
         "participants__club_member__user",
         "participants__guest",
         "participants__user",
@@ -155,12 +210,6 @@ async def get_session(
         "matches__participants__user",
         "matches__result"
     )
-
-    if not session or session.event.club_id != club_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="세션을 찾을 수 없습니다"
-        )
 
     participants = []
     for p in session.participants:
@@ -223,11 +272,16 @@ async def get_session(
 
     return {
         "id": session.id,
+        "title": session.title,
         "date": session.date.isoformat(),
         "start_time": session.start_time.isoformat(),
         "end_time": session.end_time.isoformat(),
+        "location": session.location,
         "num_courts": session.num_courts,
+        "session_type": session.session_type.value if session.session_type else "league",
         "status": session.status.value,
+        "season_id": session.season_id,
+        "season_name": session.season.name if session.season else None,
         "participants": participants,
         "matches": matches,
     }
@@ -238,17 +292,10 @@ async def add_participant(
     club_id: int,
     session_id: int,
     participant_data: ParticipantAdd,
-    current_user: User = Depends(get_current_active_user)
+    membership: ClubMember = Depends(require_club_manager)
 ):
     """참가자 추가 (회원/게스트/준회원)"""
-    await check_manager_permission(club_id, current_user)
-
-    session = await Session.get_or_none(id=session_id).prefetch_related("event")
-    if not session or session.event.club_id != club_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="세션을 찾을 수 없습니다"
-        )
+    session = await get_session_or_404(session_id, club_id)
 
     category = ParticipantCategory(participant_data.category)
     participation_type = ParticipationType(participant_data.participation_type) if participant_data.participation_type else None
@@ -260,7 +307,7 @@ async def add_participant(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="회원 ID가 필요합니다"
             )
-        member = await ClubMember.get_or_none(id=participant_data.member_id, club_id=club_id)
+        member = await ClubMember.get_or_none(id=participant_data.member_id, club_id=club_id, is_deleted=False)
         if not member:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -289,7 +336,7 @@ async def add_participant(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="게스트 ID가 필요합니다"
             )
-        guest = await Guest.get_or_none(id=participant_data.guest_id, club_id=club_id)
+        guest = await Guest.get_or_none(id=participant_data.guest_id, club_id=club_id, is_deleted=False)
         if not guest:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -318,7 +365,7 @@ async def add_participant(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="사용자 ID가 필요합니다"
             )
-        user = await User.get_or_none(id=participant_data.user_id)
+        user = await User.get_or_none(id=participant_data.user_id, is_deleted=False)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -362,12 +409,20 @@ async def remove_participant(
     club_id: int,
     session_id: int,
     participant_id: int,
-    current_user: User = Depends(get_current_active_user)
+    membership: ClubMember = Depends(require_club_manager)
 ):
-    """참가자 제거"""
-    await check_manager_permission(club_id, current_user)
+    """참가자 제거 (participant_id 또는 member_id로)"""
 
+    # participant_id로 먼저 시도
     participant = await SessionParticipant.get_or_none(id=participant_id, session_id=session_id)
+
+    # 없으면 member_id로 시도
+    if not participant:
+        participant = await SessionParticipant.get_or_none(
+            session_id=session_id,
+            club_member_id=participant_id
+        )
+
     if not participant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -378,22 +433,49 @@ async def remove_participant(
     return {"message": "참가자가 제거되었습니다"}
 
 
+@router.post("/{session_id}/participants/{member_id}")
+async def add_member_participant(
+    club_id: int,
+    session_id: int,
+    member_id: int,
+    membership: ClubMember = Depends(require_club_manager)
+):
+    """멤버 참가자 간편 추가 (member_id 직접 사용)"""
+    session = await get_session_or_404(session_id, club_id)
+
+    member = await ClubMember.get_or_none(id=member_id, club_id=club_id, is_deleted=False)
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="회원을 찾을 수 없습니다"
+        )
+
+    # 중복 체크
+    existing = await SessionParticipant.get_or_none(session=session, club_member=member)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미 참가 중인 회원입니다"
+        )
+
+    await SessionParticipant.create(
+        session=session,
+        club_member=member,
+        participant_category=ParticipantCategory.MEMBER
+    )
+
+    return {"message": "참가자가 추가되었습니다"}
+
+
 @router.post("/{session_id}/matches")
 async def create_match(
     club_id: int,
     session_id: int,
     match_data: MatchCreate,
-    current_user: User = Depends(get_current_active_user)
+    membership: ClubMember = Depends(require_club_manager)
 ):
     """경기 생성"""
-    await check_manager_permission(club_id, current_user)
-
-    session = await Session.get_or_none(id=session_id).prefetch_related("event")
-    if not session or session.event.club_id != club_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="세션을 찾을 수 없습니다"
-        )
+    session = await get_session_or_404(session_id, club_id)
 
     # 경기 번호 자동 생성
     match_count = await Match.filter(session=session).count()
@@ -412,7 +494,7 @@ async def create_match(
         category = MatchParticipantCategory(participant_data.category)
 
         if category == MatchParticipantCategory.MEMBER:
-            member = await ClubMember.get_or_none(id=participant_data.member_id)
+            member = await ClubMember.get_or_none(id=participant_data.member_id, is_deleted=False)
             if member:
                 await MatchParticipant.create(
                     match=match,
@@ -422,7 +504,7 @@ async def create_match(
                     position=position
                 )
         elif category == MatchParticipantCategory.GUEST:
-            guest = await Guest.get_or_none(id=participant_data.guest_id)
+            guest = await Guest.get_or_none(id=participant_data.guest_id, is_deleted=False)
             if guest:
                 await MatchParticipant.create(
                     match=match,
@@ -432,7 +514,7 @@ async def create_match(
                     position=position
                 )
         elif category == MatchParticipantCategory.ASSOCIATE:
-            user = await User.get_or_none(id=participant_data.user_id)
+            user = await User.get_or_none(id=participant_data.user_id, is_deleted=False)
             if user:
                 await MatchParticipant.create(
                     match=match,
@@ -449,7 +531,7 @@ async def create_match(
     # 하위 호환성: 기존 형식 (team_a_members) 사용
     elif match_data.team_a_members:
         for idx, member_id in enumerate(match_data.team_a_members, 1):
-            member = await ClubMember.get_or_none(id=member_id)
+            member = await ClubMember.get_or_none(id=member_id, is_deleted=False)
             if member:
                 await MatchParticipant.create(
                     match=match,
@@ -466,7 +548,7 @@ async def create_match(
     # 하위 호환성: 기존 형식 (team_b_members) 사용
     elif match_data.team_b_members:
         for idx, member_id in enumerate(match_data.team_b_members, 1):
-            member = await ClubMember.get_or_none(id=member_id)
+            member = await ClubMember.get_or_none(id=member_id, is_deleted=False)
             if member:
                 await MatchParticipant.create(
                     match=match,
@@ -485,33 +567,33 @@ async def update_match(
     session_id: int,
     match_id: int,
     match_data: MatchUpdate,
-    current_user: User = Depends(get_current_active_user)
+    membership: ClubMember = Depends(require_club_manager)
 ):
     """경기 결과 업데이트 (자동 저장)"""
-    await check_manager_permission(club_id, current_user)
-    
+    await get_session_or_404(session_id, club_id)
+
     match = await Match.get_or_none(id=match_id, session_id=session_id)
     if not match:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="경기를 찾을 수 없습니다"
         )
-    
+
     # 결과 업데이트 또는 생성
     result = await MatchResult.get_or_none(match=match)
-    
+
     if result:
         if match_data.team_a_score is not None:
             result.team_a_score = match_data.team_a_score
         if match_data.team_b_score is not None:
             result.team_b_score = match_data.team_b_score
-        
+
         # 승자 결정
         if result.team_a_score > result.team_b_score:
             result.winner_team = Team.A
         elif result.team_b_score > result.team_a_score:
             result.winner_team = Team.B
-            
+
         await result.save()
     else:
         if match_data.team_a_score is not None and match_data.team_b_score is not None:
@@ -520,17 +602,267 @@ async def update_match(
                 winner = Team.A
             elif match_data.team_b_score > match_data.team_a_score:
                 winner = Team.B
-                
+
+            # 현재 사용자 조회
+            user = await membership.user
             result = await MatchResult.create(
                 match=match,
                 team_a_score=match_data.team_a_score,
                 team_b_score=match_data.team_b_score,
                 sets_detail={},
                 winner_team=winner,
-                recorded_by=current_user
+                recorded_by=user
             )
-    
+
     match.status = MatchStatus.COMPLETED
     await match.save()
-    
+
     return {"message": "경기 결과가 저장되었습니다"}
+
+
+@router.get("/{session_id}/matches")
+async def list_matches(
+    club_id: int,
+    session_id: int,
+    current_user: User = Depends(get_current_active_user)
+):
+    """세션의 경기 목록 조회"""
+    session = await get_session_or_404(session_id, club_id)
+
+    matches = await Match.filter(session=session).prefetch_related(
+        "participants__club_member__user",
+        "participants__guest",
+        "participants__user"
+    ).order_by("match_number")
+
+    result = []
+    for m in matches:
+        team_a = [p for p in m.participants if p.team == Team.A]
+        team_b = [p for p in m.participants if p.team == Team.B]
+
+        match_result = await MatchResult.get_or_none(match_id=m.id)
+
+        def format_participant(p):
+            data = {
+                "id": p.id,
+                "category": p.participant_category.value,
+                "team": p.team.value,
+            }
+            if p.club_member:
+                data["member"] = {
+                    "id": p.club_member.id,
+                    "user": {
+                        "name": p.club_member.user.name if p.club_member.user else None,
+                        "gender": p.club_member.user.gender if p.club_member.user else None,
+                    }
+                }
+            elif p.guest:
+                data["guest"] = {"id": p.guest.id, "name": p.guest.name}
+            elif p.user:
+                data["user"] = {"id": p.user.id, "name": p.user.name}
+            return data
+
+        result.append({
+            "id": m.id,
+            "match_number": m.match_number,
+            "court_number": m.court_number,
+            "match_type": m.match_type.value,
+            "status": m.status.value,
+            "participants": [format_participant(p) for p in m.participants],
+            "score_a": match_result.team_a_score if match_result else None,
+            "score_b": match_result.team_b_score if match_result else None,
+        })
+
+    return result
+
+
+@router.get("/{session_id}/participants")
+async def list_participants(
+    club_id: int,
+    session_id: int,
+    current_user: User = Depends(get_current_active_user)
+):
+    """세션의 참가자 목록 조회"""
+    session = await get_session_or_404(session_id, club_id)
+
+    participants = await SessionParticipant.filter(session=session).prefetch_related(
+        "club_member__user",
+        "guest",
+        "user"
+    )
+
+    result = []
+    for p in participants:
+        data = {
+            "id": p.id,
+            "category": p.participant_category.value,
+        }
+        if p.club_member:
+            data["member"] = {
+                "id": p.club_member.id,
+                "user": {
+                    "name": p.club_member.user.name if p.club_member.user else None,
+                    "gender": p.club_member.user.gender if p.club_member.user else None,
+                }
+            }
+        elif p.guest:
+            data["guest"] = {"id": p.guest.id, "name": p.guest.name, "gender": p.guest.gender}
+        elif p.user:
+            data["user"] = {"id": p.user.id, "name": p.user.name, "gender": p.user.gender}
+        result.append(data)
+
+    return result
+
+
+@router.delete("/{session_id}")
+async def delete_session(
+    club_id: int,
+    session_id: int,
+    membership: ClubMember = Depends(require_club_manager)
+):
+    """세션 삭제"""
+    session = await get_session_or_404(session_id, club_id)
+    session.is_deleted = True
+    await session.save()
+    return {"message": "세션이 삭제되었습니다"}
+
+
+@router.put("/{session_id}")
+async def update_session(
+    club_id: int,
+    session_id: int,
+    session_data: SessionCreate,
+    membership: ClubMember = Depends(require_club_manager)
+):
+    """세션 수정"""
+    session = await get_session_or_404(session_id, club_id)
+
+    if session_data.title is not None:
+        session.title = session_data.title
+    if session_data.date is not None:
+        session.date = session_data.date
+    if session_data.start_time is not None:
+        session.start_time = session_data.start_time
+    if session_data.end_time is not None:
+        session.end_time = session_data.end_time
+    if session_data.location is not None:
+        session.location = session_data.location
+    if session_data.session_type is not None:
+        session.session_type = SessionType(session_data.session_type)
+
+    await session.save()
+
+    return {
+        "id": session.id,
+        "title": session.title,
+        "date": session.date.isoformat(),
+        "location": session.location,
+        "session_type": session.session_type.value if session.session_type else "league",
+    }
+
+
+@router.post("/{session_id}/matches/generate")
+async def generate_matches(
+    club_id: int,
+    session_id: int,
+    membership: ClubMember = Depends(require_club_manager)
+):
+    """경기 자동 생성"""
+    # 기본 세션 검증
+    await get_session_or_404(session_id, club_id)
+
+    # 참가자 데이터 포함하여 다시 조회
+    session = await Session.get(id=session_id).prefetch_related(
+        "event", "season", "participants__club_member__user",
+        "participants__guest", "participants__user"
+    )
+
+    if len(session.participants) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="최소 2명의 참가자가 필요합니다"
+        )
+
+    # 기존 경기 삭제
+    await Match.filter(session=session).delete()
+
+    # 참가자 분류
+    males = []
+    females = []
+    for p in session.participants:
+        gender = None
+        if p.club_member and p.club_member.user:
+            gender = p.club_member.user.gender
+        elif p.guest:
+            gender = p.guest.gender
+        elif p.user:
+            gender = p.user.gender
+
+        if gender == "male":
+            males.append(p)
+        elif gender == "female":
+            females.append(p)
+
+    import random
+    random.shuffle(males)
+    random.shuffle(females)
+
+    matches_created = []
+    match_number = 0
+
+    # 혼합 복식 생성 (남녀 짝)
+    while len(males) >= 2 and len(females) >= 2:
+        match_number += 1
+        match = await Match.create(
+            session=session,
+            match_number=match_number,
+            court_number=(match_number - 1) % session.num_courts + 1,
+            scheduled_time=session.start_time,
+            match_type=MatchType.MIXED_DOUBLES,
+            status=MatchStatus.SCHEDULED
+        )
+
+        # 팀 A: 남1 + 여1
+        m1, m2 = males.pop(0), males.pop(0)
+        f1, f2 = females.pop(0), females.pop(0)
+
+        for p, team in [(m1, Team.A), (f1, Team.A), (m2, Team.B), (f2, Team.B)]:
+            await MatchParticipant.create(
+                match=match,
+                club_member=p.club_member,
+                guest=p.guest,
+                user=p.user,
+                participant_category=p.participant_category,
+                team=team,
+                position=1
+            )
+
+        matches_created.append(match.id)
+
+    # 남자 복식 생성
+    while len(males) >= 4:
+        match_number += 1
+        match = await Match.create(
+            session=session,
+            match_number=match_number,
+            court_number=(match_number - 1) % session.num_courts + 1,
+            scheduled_time=session.start_time,
+            match_type=MatchType.MENS_DOUBLES,
+            status=MatchStatus.SCHEDULED
+        )
+
+        for i, team in enumerate([Team.A, Team.A, Team.B, Team.B]):
+            p = males.pop(0)
+            await MatchParticipant.create(
+                match=match,
+                club_member=p.club_member,
+                guest=p.guest,
+                user=p.user,
+                participant_category=p.participant_category,
+                team=team,
+                position=1
+            )
+
+        matches_created.append(match.id)
+
+    return {"message": f"{len(matches_created)}개의 경기가 생성되었습니다", "match_ids": matches_created}

@@ -24,7 +24,7 @@ async def list_matches(
     limit: int = 100
 ):
     """매치 목록 조회"""
-    matches = await Match.filter(session_id=session_id).offset(skip).limit(limit)
+    matches = await Match.filter(session_id=session_id, is_deleted=False).offset(skip).limit(limit)
     return [MatchResponse.model_validate(match) for match in matches]
 
 
@@ -34,7 +34,7 @@ async def create_match(
     current_user: User = Depends(get_current_active_user)
 ):
     """매치 생성"""
-    session = await Session.get_or_none(id=match_data.session_id)
+    session = await Session.get_or_none(id=match_data.session_id, is_deleted=False)
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -58,7 +58,7 @@ async def get_match(
     current_user: User = Depends(get_current_active_user)
 ):
     """매치 상세 조회"""
-    match = await Match.get_or_none(id=match_id)
+    match = await Match.get_or_none(id=match_id, is_deleted=False)
     if not match:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -74,7 +74,7 @@ async def update_match(
     current_user: User = Depends(get_current_active_user)
 ):
     """매치 수정"""
-    match = await Match.get_or_none(id=match_id)
+    match = await Match.get_or_none(id=match_id, is_deleted=False)
     if not match:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -98,15 +98,16 @@ async def delete_match(
     match_id: int,
     current_user: User = Depends(get_current_active_user)
 ):
-    """매치 삭제"""
-    match = await Match.get_or_none(id=match_id)
+    """매치 삭제 (soft delete)"""
+    match = await Match.get_or_none(id=match_id, is_deleted=False)
     if not match:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="매치를 찾을 수 없습니다"
         )
 
-    await match.delete()
+    match.is_deleted = True
+    await match.save()
 
 
 # 매치 참가자
@@ -116,14 +117,14 @@ async def list_match_participants(
     current_user: User = Depends(get_current_active_user)
 ):
     """매치 참가자 목록 조회"""
-    match = await Match.get_or_none(id=match_id)
+    match = await Match.get_or_none(id=match_id, is_deleted=False)
     if not match:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="매치를 찾을 수 없습니다"
         )
 
-    participants = await MatchParticipant.filter(match_id=match_id)
+    participants = await MatchParticipant.filter(match_id=match_id, is_deleted=False)
     return [MatchParticipantResponse.model_validate(p) for p in participants]
 
 
@@ -135,7 +136,7 @@ async def create_match_result(
     current_user: User = Depends(get_current_active_user)
 ):
     """매치 결과 등록"""
-    match = await Match.get_or_none(id=match_id)
+    match = await Match.get_or_none(id=match_id, is_deleted=False)
     if not match:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

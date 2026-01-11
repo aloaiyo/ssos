@@ -84,7 +84,8 @@ async def get_announcements(
     await check_club_member(club_id, current_user)
 
     announcements = await Announcement.filter(
-        club_id=club_id
+        club_id=club_id,
+        is_deleted=False
     ).prefetch_related("author").order_by("-is_pinned", "-created_at")
 
     return [
@@ -147,7 +148,8 @@ async def get_announcement(
 
     announcement = await Announcement.filter(
         id=announcement_id,
-        club_id=club_id
+        club_id=club_id,
+        is_deleted=False
     ).prefetch_related("author").first()
 
     if not announcement:
@@ -186,7 +188,8 @@ async def update_announcement(
 
     announcement = await Announcement.filter(
         id=announcement_id,
-        club_id=club_id
+        club_id=club_id,
+        is_deleted=False
     ).prefetch_related("author").first()
 
     if not announcement:
@@ -229,15 +232,20 @@ async def delete_announcement(
     """공지사항 삭제"""
     await check_manager_permission(club_id, current_user)
 
-    deleted_count = await Announcement.filter(
+    announcement = await Announcement.filter(
         id=announcement_id,
-        club_id=club_id
-    ).delete()
+        club_id=club_id,
+        is_deleted=False
+    ).first()
 
-    if deleted_count == 0:
+    if not announcement:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="공지사항을 찾을 수 없습니다."
         )
+
+    # Soft delete
+    announcement.is_deleted = True
+    await announcement.save()
 
     return {"message": "삭제되었습니다."}

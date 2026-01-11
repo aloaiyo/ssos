@@ -25,6 +25,10 @@ class Club(BaseModel):
     default_match_duration = fields.IntField(default=30)  # 기본 경기 시간 (분)
     location = fields.CharField(max_length=500, null=True)  # 활동 장소
 
+    # 가입 설정
+    is_join_allowed = fields.BooleanField(default=True)  # 가입 허용 여부
+    requires_approval = fields.BooleanField(default=False)  # 가입 승인 필요 여부
+
     # 관계
     members: fields.ReverseRelation["ClubMember"]
     events: fields.ReverseRelation["Event"]

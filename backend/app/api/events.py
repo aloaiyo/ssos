@@ -20,7 +20,7 @@ async def list_events(
     limit: int = 100
 ):
     """일정 목록 조회"""
-    events = await Event.filter(club_id=club_id).offset(skip).limit(limit)
+    events = await Event.filter(club_id=club_id, is_deleted=False).offset(skip).limit(limit)
     return [EventResponse.model_validate(event) for event in events]
 
 
@@ -30,7 +30,7 @@ async def create_event(
     current_user: User = Depends(get_current_active_user)
 ):
     """일정 생성"""
-    club = await Club.get_or_none(id=event_data.club_id)
+    club = await Club.get_or_none(id=event_data.club_id, is_deleted=False)
     if not club:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -53,7 +53,7 @@ async def get_event(
     current_user: User = Depends(get_current_active_user)
 ):
     """일정 상세 조회"""
-    event = await Event.get_or_none(id=event_id)
+    event = await Event.get_or_none(id=event_id, is_deleted=False)
     if not event:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -69,7 +69,7 @@ async def update_event(
     current_user: User = Depends(get_current_active_user)
 ):
     """일정 수정"""
-    event = await Event.get_or_none(id=event_id)
+    event = await Event.get_or_none(id=event_id, is_deleted=False)
     if not event:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -93,12 +93,13 @@ async def delete_event(
     event_id: int,
     current_user: User = Depends(get_current_active_user)
 ):
-    """일정 삭제"""
-    event = await Event.get_or_none(id=event_id)
+    """일정 삭제 (soft delete)"""
+    event = await Event.get_or_none(id=event_id, is_deleted=False)
     if not event:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="일정을 찾을 수 없습니다"
         )
 
-    await event.delete()
+    event.is_deleted = True
+    await event.save()

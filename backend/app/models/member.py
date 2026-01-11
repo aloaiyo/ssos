@@ -10,6 +10,7 @@ class MemberRole(str, Enum):
     """회원 역할"""
     MANAGER = "manager"  # 클럽 관리자
     MEMBER = "member"    # 일반 회원
+    GUEST = "guest"      # 게스트 (제한된 권한)
 
 
 class MemberStatus(str, Enum):
@@ -17,6 +18,8 @@ class MemberStatus(str, Enum):
     PENDING = "pending"    # 가입 대기
     ACTIVE = "active"      # 활성 (승인됨)
     INACTIVE = "inactive"  # 비활성
+    LEFT = "left"          # 탈퇴
+    BANNED = "banned"      # 추방됨
 
 
 class Gender(str, Enum):

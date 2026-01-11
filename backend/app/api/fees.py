@@ -121,7 +121,7 @@ async def get_fee_settings(
     """회비 설정 목록 조회"""
     await check_manager_permission(club_id, current_user)
 
-    settings = await FeeSetting.filter(club_id=club_id).order_by("-created_at")
+    settings = await FeeSetting.filter(club_id=club_id, is_deleted=False).order_by("-created_at")
 
     return [
         FeeSettingResponse(
@@ -178,7 +178,7 @@ async def update_fee_setting(
     """회비 설정 수정"""
     await check_manager_permission(club_id, current_user)
 
-    setting = await FeeSetting.filter(id=setting_id, club_id=club_id).first()
+    setting = await FeeSetting.filter(id=setting_id, club_id=club_id, is_deleted=False).first()
     if not setting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -221,12 +221,16 @@ async def delete_fee_setting(
     """회비 설정 삭제"""
     await check_manager_permission(club_id, current_user)
 
-    deleted_count = await FeeSetting.filter(id=setting_id, club_id=club_id).delete()
-    if deleted_count == 0:
+    setting = await FeeSetting.filter(id=setting_id, club_id=club_id, is_deleted=False).first()
+    if not setting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="회비 설정을 찾을 수 없습니다."
         )
+
+    # Soft delete
+    setting.is_deleted = True
+    await setting.save()
 
     return {"message": "삭제되었습니다."}
 
@@ -291,7 +295,7 @@ async def generate_payments(
     """월별 납부 기록 일괄 생성"""
     await check_manager_permission(club_id, current_user)
 
-    setting = await FeeSetting.filter(id=setting_id, club_id=club_id).first()
+    setting = await FeeSetting.filter(id=setting_id, club_id=club_id, is_deleted=False).first()
     if not setting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -301,7 +305,8 @@ async def generate_payments(
     # 활성 회원 조회
     members = await ClubMember.filter(
         club_id=club_id,
-        status=MemberStatus.ACTIVE
+        status=MemberStatus.ACTIVE,
+        is_deleted=False
     )
 
     created_count = 0
