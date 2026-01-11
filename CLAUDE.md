@@ -64,27 +64,29 @@ npm run lint     # Linting
 
 ## Architecture
 
-### Authentication Flow (AWS Cognito)
+### Authentication Flow (AWS Cognito + HTTP-only Cookies)
 
-The system uses **AWS Cognito** for authentication with a dual-token approach:
+The system uses **AWS Cognito** for authentication with **HTTP-only cookies** for security:
 
 1. **Cognito Hosted UI** handles login/signup (Google SSO supported)
 2. Backend exchanges Cognito tokens for **local JWT tokens**
-3. Frontend stores local JWT in localStorage, auto-refreshes on 401
+3. Backend sets JWT as **HTTP-only cookie** (not localStorage)
+4. All subsequent API calls use cookies automatically
 
 ```
 Frontend → Cognito Hosted UI → Authorization Code
     ↓
 Backend /api/auth/callback → Exchange code for Cognito ID Token
     ↓
-Verify ID Token → Sync/Create local User → Issue local JWT
+Verify ID Token → Sync/Create local User → Set HTTP-only cookie
     ↓
-Frontend uses local JWT for all subsequent API calls
+Frontend API calls include cookie automatically
 ```
 
 **Key files**:
 - `backend/app/services/cognito_service.py` - Cognito API wrapper
 - `backend/app/services/auth_service.py` - Token exchange, user sync
+- `backend/app/core/dependencies.py` - Cookie-based authentication dependencies
 - `frontend/src/api/auth.js` - Cognito redirect URLs, API calls
 - `frontend/src/views/auth/CallbackView.vue` - OAuth callback handler
 
@@ -92,15 +94,20 @@ Frontend uses local JWT for all subsequent API calls
 
 ```
 User (전역 사용자, cognito_sub linked)
-  └── ClubMember (동호회 회원, role: admin/member)
+  └── ClubMember (동호회 회원, role: manager/member)
         └── Club (동호회) ← tenant isolation boundary
+              ├── Season (시즌) ← ranking aggregation period
+              │     ├── Session (세션, linked via Event)
+              │     └── SeasonRanking (시즌별 랭킹)
               ├── Event (일정)
               │     └── Session (세션)
               │           ├── SessionParticipant
               │           └── Match (경기)
               │                 └── MatchParticipant
               │                       └── MatchResult
-              └── Ranking
+              ├── Guest (게스트 참가자)
+              ├── Announcement (공지사항)
+              └── Fee (회비)
 ```
 
 **Important**: All club-related queries MUST filter by `club_id` for tenant isolation.
@@ -109,11 +116,15 @@ User (전역 사용자, cognito_sub linked)
 
 ```
 backend/app/
-├── models/       # Tortoise-ORM models (user.py, club.py, member.py, event.py, match.py, ranking.py)
+├── models/       # Tortoise-ORM models
+│   ├── user.py, club.py, member.py     # Core entities
+│   ├── season.py                        # Season & SeasonRanking
+│   ├── event.py, match.py, ranking.py   # Game management
+│   └── guest.py, fee.py, announcement.py # Auxiliary features
 ├── schemas/      # Pydantic V2 schemas
-├── api/          # FastAPI routes (auth, clubs, members, events, sessions, matches, rankings, users)
+├── api/          # FastAPI routes
 ├── services/     # Business logic (auth_service, cognito_service, matching_service)
-├── core/         # security.py (JWT), dependencies.py (DI)
+├── core/         # security.py (JWT), dependencies.py (DI with cookie auth)
 └── config.py     # Settings with AWS SSM support
 ```
 
@@ -121,10 +132,10 @@ backend/app/
 
 ```
 frontend/src/
-├── views/        # Page components (auth/, club/, member/, session/, match/, ranking/)
+├── views/        # Page components (auth/, club/, member/, session/, season/, match/, ranking/)
 ├── components/   # Reusable (layout/, common/, match/)
-├── stores/       # Pinia stores (auth, club, member, session, match, ranking)
-├── api/          # Axios clients (index.js has interceptors for auth)
+├── stores/       # Pinia stores (auth, club, member, session, season, match, ranking)
+├── api/          # Axios clients (withCredentials: true for cookies)
 ├── router/       # Vue Router with auth guards
 └── plugins/      # Vuetify config
 ```
@@ -183,11 +194,22 @@ onMounted(async () => {
 </script>
 ```
 
-### API Interceptors
+### API Clients (Cookie-based)
 `frontend/src/api/index.js` handles:
-- Auto-attach JWT to requests
-- 401 response → auto-refresh token via `/api/auth/refresh`
-- Failed refresh → logout and redirect to login
+- `withCredentials: true` for automatic cookie inclusion
+- Axios interceptors for error handling
+- CORS requires explicit credentials support
+
+### Permission Dependencies
+```python
+from app.core.dependencies import (
+    get_current_user,           # Basic auth via cookie
+    get_current_active_user,    # Active user check
+    require_super_admin,        # Super admin only
+    require_club_member,        # Club membership check
+    require_club_manager,       # Club manager role check
+)
+```
 
 ## Environment Variables
 
@@ -215,19 +237,20 @@ VITE_COGNITO_SIGN_OUT_URI=http://localhost:3000
 ## Common Gotchas
 
 - **Aerich**: Run `migrate` before `upgrade` after model changes
+- **Aerich Migration Naming**: 파일명은 `0000_`, `0001_`, `0002_` 형식으로 4자리 숫자 prefix 사용 (예: `0003_20260111_add_feature.py`)
 - **Tortoise**: ALL db operations need `await`, even `.count()`, `.exists()`
 - **Pydantic V2**: Use `model_config = ConfigDict(from_attributes=True)`
-- **Cognito tokens**: Backend issues local JWTs after Cognito validation; frontend only uses local tokens
-- **CORS**: Backend 8000, Frontend 3000 - configured in `config.py`
-- **Frontend ports**: Vite may use 5173 if 3000 is taken; check CORS_ORIGINS
+- **Cookies**: Frontend must use `withCredentials: true` for Axios; Backend CORS must allow credentials
+- **CORS**: Backend 8000, Frontend 3000 - configured in `config.py` with `allow_credentials=True`
+- **Frontend ports**: Vite may use 5173 if 3000 is taken; update CORS_ORIGINS accordingly
 
 ## API Documentation
 
 When backend is running: http://localhost:8000/docs
 
 Key endpoints:
-- `POST /api/auth/login` - Email/password login
-- `POST /api/auth/callback` - Cognito OAuth callback
-- `POST /api/auth/refresh` - Token refresh
+- `POST /api/auth/callback` - Cognito OAuth callback (sets cookie)
+- `POST /api/auth/logout` - Clear auth cookie
 - `GET /api/auth/me` - Current user info
 - `POST /api/sessions/{id}/matches/generate` - Auto-generate matches
+- `GET /api/clubs/{id}/seasons` - List seasons for a club
