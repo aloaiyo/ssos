@@ -64,4 +64,13 @@ export default {
   getClubMembers(clubId) {
     return apiClient.get(`/clubs/${clubId}/members`)
   },
+
+  /**
+   * 동호회 가입
+   * @param {number} clubId - 동호회 ID
+   * @returns {Promise}
+   */
+  joinClub(clubId) {
+    return apiClient.post(`/clubs/${clubId}/join`)
+  },
 }

@@ -111,7 +111,8 @@ const menuItems = [
 
 // 일정 & 경기 메뉴
 const scheduleMenuItems = [
-  { title: '일정', icon: 'mdi-calendar-outline', to: { name: 'session-list' } },
+  { title: '시즌', icon: 'mdi-calendar-star', to: { name: 'season-list' } },
+  { title: '세션', icon: 'mdi-calendar-outline', to: { name: 'session-list' } },
   { title: '경기 기록', icon: 'mdi-tennis', to: { name: 'match-list' } },
   { title: '랭킹', icon: 'mdi-trophy-outline', to: { name: 'ranking-list' } },
 ]

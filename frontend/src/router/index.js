@@ -85,11 +85,30 @@ const routes = [
     component: () => import('@/views/member/MemberManageView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true },
   },
-  // 일정
+  // 시즌
+  {
+    path: '/seasons',
+    name: 'season-list',
+    component: () => import('@/views/season/SeasonListView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/seasons/:seasonId',
+    name: 'season-detail',
+    component: () => import('@/views/season/SeasonDetailView.vue'),
+    meta: { requiresAuth: true },
+  },
+  // 세션
   {
     path: '/sessions',
     name: 'session-list',
     component: () => import('@/views/session/SessionListView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/sessions/:sessionId',
+    name: 'session-detail',
+    component: () => import('@/views/session/SessionDetailView.vue'),
     meta: { requiresAuth: true },
   },
   // 경기

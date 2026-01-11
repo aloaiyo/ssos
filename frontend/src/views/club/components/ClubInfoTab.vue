@@ -82,6 +82,32 @@
             </div>
           </div>
 
+          <!-- 가입 설정 (읽기 모드) -->
+          <v-divider class="my-6" />
+          <div class="join-settings-view">
+            <div class="info-label mb-3">
+              <v-icon size="18" class="mr-1">mdi-account-plus</v-icon>
+              가입 설정
+            </div>
+            <div class="d-flex flex-wrap gap-3">
+              <v-chip
+                :color="club?.is_join_allowed ? 'success' : 'error'"
+                variant="tonal"
+              >
+                <v-icon start size="16">{{ club?.is_join_allowed ? 'mdi-check-circle' : 'mdi-close-circle' }}</v-icon>
+                {{ club?.is_join_allowed ? '가입 가능' : '가입 불가' }}
+              </v-chip>
+              <v-chip
+                v-if="club?.is_join_allowed"
+                :color="club?.requires_approval ? 'warning' : 'info'"
+                variant="tonal"
+              >
+                <v-icon start size="16">{{ club?.requires_approval ? 'mdi-account-clock' : 'mdi-account-check' }}</v-icon>
+                {{ club?.requires_approval ? '승인 필요' : '바로 가입' }}
+              </v-chip>
+            </div>
+          </div>
+
           <!-- 정기 활동 일정 (읽기 모드) -->
           <v-divider class="my-6" />
           <div class="schedule-view">
@@ -162,6 +188,62 @@
               />
             </v-col>
           </v-row>
+
+          <!-- 가입 설정 (편집 모드) -->
+          <v-divider class="my-6" />
+          <div class="join-settings-edit">
+            <div class="info-label mb-4">
+              <v-icon size="18" class="mr-1">mdi-account-plus</v-icon>
+              가입 설정
+            </div>
+            <v-row>
+              <v-col cols="12" md="6">
+                <v-switch
+                  v-model="form.is_join_allowed"
+                  color="success"
+                  hide-details
+                  inset
+                >
+                  <template v-slot:label>
+                    <div class="switch-label">
+                      <v-icon size="20" class="mr-2">
+                        {{ form.is_join_allowed ? 'mdi-account-plus' : 'mdi-account-off' }}
+                      </v-icon>
+                      <div>
+                        <div class="font-weight-medium">가입 허용</div>
+                        <div class="text-caption text-medium-emphasis">
+                          {{ form.is_join_allowed ? '새로운 회원이 가입할 수 있습니다' : '신규 가입이 차단됩니다' }}
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                </v-switch>
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-switch
+                  v-model="form.requires_approval"
+                  :disabled="!form.is_join_allowed"
+                  color="warning"
+                  hide-details
+                  inset
+                >
+                  <template v-slot:label>
+                    <div class="switch-label" :class="{ 'text-disabled': !form.is_join_allowed }">
+                      <v-icon size="20" class="mr-2">
+                        {{ form.requires_approval ? 'mdi-account-clock' : 'mdi-account-check' }}
+                      </v-icon>
+                      <div>
+                        <div class="font-weight-medium">관리자 승인 필요</div>
+                        <div class="text-caption text-medium-emphasis">
+                          {{ form.requires_approval ? '관리자가 승인해야 가입됩니다' : '신청 즉시 가입됩니다' }}
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                </v-switch>
+              </v-col>
+            </v-row>
+          </div>
 
           <v-divider class="my-6" />
 
@@ -266,6 +348,8 @@ const form = ref({
   location: '',
   default_num_courts: null,
   default_match_duration: 30,
+  is_join_allowed: true,
+  requires_approval: false,
   schedules: [],
 })
 
@@ -309,6 +393,8 @@ function syncFormFromClub() {
       location: props.club.location || '',
       default_num_courts: props.club.default_num_courts,
       default_match_duration: props.club.default_match_duration || 30,
+      is_join_allowed: props.club.is_join_allowed ?? true,
+      requires_approval: props.club.requires_approval ?? false,
       schedules: (props.club.schedules || []).map(s => ({
         day_of_week: s.day_of_week,
         start_time: formatTime(s.start_time),
@@ -476,6 +562,20 @@ async function handleDelete() {
 .danger-item p {
   font-size: 0.85rem;
   margin: 0;
+}
+
+/* 가입 설정 스위치 */
+.switch-label {
+  display: flex;
+  align-items: flex-start;
+}
+
+.switch-label.text-disabled {
+  opacity: 0.5;
+}
+
+.gap-3 {
+  gap: 12px;
 }
 
 /* 반응형 */

@@ -91,9 +91,7 @@
 
     <!-- 알림 버튼 -->
     <v-btn icon variant="text" class="mr-1">
-      <v-badge color="error" dot>
-        <v-icon>mdi-bell-outline</v-icon>
-      </v-badge>
+      <v-icon>mdi-bell-outline</v-icon>
     </v-btn>
 
     <!-- 사용자 메뉴 -->

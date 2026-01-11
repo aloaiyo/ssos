@@ -1,37 +1,119 @@
-// 세션 관련 API (Phase 2에서 사용 예정)
+// 세션 관련 API
 import apiClient from './index'
 
 export default {
-  // Phase 2에서 구현 예정
-  getSessions(eventId, params = {}) {
-    return apiClient.get(`/events/${eventId}/sessions`, { params })
+  /**
+   * 세션 목록 조회
+   * @param {number} clubId - 동호회 ID
+   * @param {Object} params - { season_id, event_id }
+   * @returns {Promise} 세션 목록
+   */
+  getSessions(clubId, params = {}) {
+    return apiClient.get(`/clubs/${clubId}/sessions`, { params })
   },
 
-  getSession(sessionId) {
-    return apiClient.get(`/sessions/${sessionId}`)
+  /**
+   * 세션 상세 조회
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @returns {Promise} 세션 상세 정보
+   */
+  getSession(clubId, sessionId) {
+    return apiClient.get(`/clubs/${clubId}/sessions/${sessionId}`)
   },
 
-  createSession(eventId, sessionData) {
-    return apiClient.post(`/events/${eventId}/sessions`, sessionData)
+  /**
+   * 세션 생성
+   * @param {number} clubId - 동호회 ID
+   * @param {Object} sessionData - { title, session_date, location, session_type, season_id }
+   * @returns {Promise} 생성된 세션 정보
+   */
+  createSession(clubId, sessionData) {
+    return apiClient.post(`/clubs/${clubId}/sessions`, sessionData)
   },
 
-  updateSession(sessionId, sessionData) {
-    return apiClient.put(`/sessions/${sessionId}`, sessionData)
+  /**
+   * 세션 수정
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @param {Object} sessionData - 수정할 세션 정보
+   * @returns {Promise} 수정된 세션 정보
+   */
+  updateSession(clubId, sessionId, sessionData) {
+    return apiClient.put(`/clubs/${clubId}/sessions/${sessionId}`, sessionData)
   },
 
-  deleteSession(sessionId) {
-    return apiClient.delete(`/sessions/${sessionId}`)
+  /**
+   * 세션 삭제
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @returns {Promise}
+   */
+  deleteSession(clubId, sessionId) {
+    return apiClient.delete(`/clubs/${clubId}/sessions/${sessionId}`)
   },
 
-  getSessionParticipants(sessionId) {
-    return apiClient.get(`/sessions/${sessionId}/participants`)
+  /**
+   * 세션 참가자 목록 조회
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @returns {Promise} 참가자 목록
+   */
+  getSessionParticipants(clubId, sessionId) {
+    return apiClient.get(`/clubs/${clubId}/sessions/${sessionId}/participants`)
   },
 
-  addParticipant(sessionId, memberId) {
-    return apiClient.post(`/sessions/${sessionId}/participants/${memberId}`)
+  /**
+   * 세션 참가자 추가
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @param {number} memberId - 회원 ID
+   * @returns {Promise}
+   */
+  addParticipant(clubId, sessionId, memberId) {
+    return apiClient.post(`/clubs/${clubId}/sessions/${sessionId}/participants/${memberId}`)
   },
 
-  removeParticipant(sessionId, memberId) {
-    return apiClient.delete(`/sessions/${sessionId}/participants/${memberId}`)
+  /**
+   * 세션 참가자 제거
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @param {number} memberId - 회원 ID
+   * @returns {Promise}
+   */
+  removeParticipant(clubId, sessionId, memberId) {
+    return apiClient.delete(`/clubs/${clubId}/sessions/${sessionId}/participants/${memberId}`)
+  },
+
+  /**
+   * 세션 경기 목록 조회
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @returns {Promise} 경기 목록
+   */
+  getMatches(clubId, sessionId) {
+    return apiClient.get(`/clubs/${clubId}/sessions/${sessionId}/matches`)
+  },
+
+  /**
+   * 세션 경기 자동 생성
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @returns {Promise} 생성된 경기 목록
+   */
+  generateMatches(clubId, sessionId) {
+    return apiClient.post(`/clubs/${clubId}/sessions/${sessionId}/matches/generate`)
+  },
+
+  /**
+   * 경기 결과 업데이트
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @param {number} matchId - 경기 ID
+   * @param {Object} matchData - { team_a_score, team_b_score }
+   * @returns {Promise}
+   */
+  updateMatch(clubId, sessionId, matchId, matchData) {
+    return apiClient.put(`/clubs/${clubId}/sessions/${sessionId}/matches/${matchId}`, matchData)
   },
 }
