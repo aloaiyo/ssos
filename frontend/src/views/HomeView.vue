@@ -164,6 +164,7 @@
 
         <!-- 빠른 액션 카드들 -->
         <div
+          v-if="isManagerOfSelectedClub"
           class="bento-item bento-action glass-card hover-lift"
           @click="router.push({ name: 'club-manage' })"
         >
@@ -301,7 +302,7 @@ const clubStore = useClubStore()
 const memberStore = useMemberStore()
 
 const { user, isAdmin } = storeToRefs(authStore)
-const { selectedClub } = storeToRefs(clubStore)
+const { selectedClub, isManagerOfSelectedClub } = storeToRefs(clubStore)
 
 // 신규 동호회 환영 팝업
 const showWelcomeDialog = ref(false)

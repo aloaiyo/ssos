@@ -194,7 +194,8 @@ const userInitial = computed(() => {
 
 // 선택된 클럽 이름
 const selectedClubName = computed(() => {
-  const club = clubs.value.find(c => c.id === selectedClubId.value)
+  if (!selectedClubId.value) return '동호회 선택'
+  const club = clubs.value.find(c => c.id === parseInt(selectedClubId.value))
   return club?.name || '동호회 선택'
 })
 

@@ -86,18 +86,18 @@
             class="elevation-1"
           >
             <!-- 이름 -->
-            <template v-slot:item.user="{ item }">
+            <template v-slot:item.user_name="{ item }">
               <div class="d-flex align-center">
                 <v-avatar color="primary" size="32" class="mr-2">
                   <span class="text-white text-caption">
-                    {{ item.user?.full_name?.[0] || item.user?.username?.[0] }}
+                    {{ item.user_name?.[0] || '?' }}
                   </span>
                 </v-avatar>
                 <div>
                   <div :class="{'text-blue': item.gender === 'male', 'text-pink': item.gender === 'female'}">
-                    {{ item.user?.full_name || item.user?.username }}
+                    {{ item.user_name }}
                   </div>
-                  <div class="text-caption text-grey">{{ item.user?.email }}</div>
+                  <div class="text-caption text-grey">{{ item.user_email }}</div>
                 </div>
               </div>
             </template>
@@ -149,15 +149,15 @@
               <template v-slot:prepend>
                 <v-avatar color="primary" size="48">
                   <span class="text-white text-h6">
-                    {{ selectedMember.user?.full_name?.[0] || selectedMember.user?.username?.[0] }}
+                    {{ selectedMember.user_name?.[0] || '?' }}
                   </span>
                 </v-avatar>
               </template>
               <v-list-item-title class="text-h6">
-                {{ selectedMember.user?.full_name || selectedMember.user?.username }}
+                {{ selectedMember.user_name }}
               </v-list-item-title>
               <v-list-item-subtitle>
-                {{ selectedMember.user?.email }}
+                {{ selectedMember.user_email }}
               </v-list-item-subtitle>
             </v-list-item>
 
@@ -226,7 +226,7 @@ const genderOptions = [
 
 // 테이블 헤더
 const headers = [
-  { title: '이름', key: 'user', sortable: true },
+  { title: '이름', key: 'user_name', sortable: true },
   { title: '가입일', key: 'created_at', sortable: true },
   { title: '액션', key: 'actions', sortable: false, align: 'center' },
 ]
