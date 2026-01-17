@@ -57,7 +57,7 @@ apiClient.interceptors.response.use(
 
     if (error.response) {
       switch (error.response.status) {
-        case 401:
+        case 401: {
           // 인증 관련 요청은 refresh 시도하지 않음 (무한 루프 방지)
           const skipRefreshUrls = ['/auth/refresh', '/auth/check', '/auth/me', '/auth/login']
           const shouldSkipRefresh = skipRefreshUrls.some(url => originalRequest.url?.includes(url))
@@ -99,6 +99,7 @@ apiClient.interceptors.response.use(
           } finally {
             isRefreshing = false
           }
+        }
 
         case 403:
           console.error('접근 권한이 없습니다.')

@@ -72,8 +72,7 @@ async def list_seasons(
             season_id__in=season_ids, is_deleted=False
         ).values("season_id")
         for s in sessions:
-            season_counts = session_counts.get(s["season_id"], 0) + 1
-            session_counts[s["season_id"]] = season_counts
+            session_counts[s["season_id"]] = session_counts.get(s["season_id"], 0) + 1
 
     # 배치 쿼리로 매치 수 조회
     match_counts = {}
@@ -321,10 +320,11 @@ async def calculate_season_rankings(
     membership: ClubMember = Depends(require_club_manager)
 ):
     """시즌 랭킹 계산 (경기 결과 기반)"""
-    season = await get_season_or_404(season_id, club_id)
-
+    from tortoise.transactions import in_transaction
     from app.models.match import MatchResult, MatchParticipant, Team
     from collections import defaultdict
+
+    season = await get_season_or_404(season_id, club_id)
 
     # 경기 결과 집계
     stats = defaultdict(lambda: {"wins": 0, "draws": 0, "losses": 0, "total": 0})
@@ -371,26 +371,27 @@ async def calculate_season_rankings(
             errors.append(f"경기 {match.id} 처리 실패")
             continue
 
-    # 랭킹 업데이트
-    for member_id, stat in stats.items():
-        ranking, created = await SeasonRanking.get_or_create(
-            season=season,
-            club_member_id=member_id,
-            defaults={
-                "total_matches": stat["total"],
-                "wins": stat["wins"],
-                "draws": stat["draws"],
-                "losses": stat["losses"],
-                "points": stat["wins"] * 3 + stat["draws"]  # 승리 3점, 무승부 1점
-            }
-        )
-        if not created:
-            ranking.total_matches = stat["total"]
-            ranking.wins = stat["wins"]
-            ranking.draws = stat["draws"]
-            ranking.losses = stat["losses"]
-            ranking.points = stat["wins"] * 3 + stat["draws"]
-            await ranking.save()
+    # 트랜잭션 내에서 랭킹 업데이트 (원자적 처리)
+    async with in_transaction():
+        for member_id, stat in stats.items():
+            ranking, created = await SeasonRanking.get_or_create(
+                season=season,
+                club_member_id=member_id,
+                defaults={
+                    "total_matches": stat["total"],
+                    "wins": stat["wins"],
+                    "draws": stat["draws"],
+                    "losses": stat["losses"],
+                    "points": stat["wins"] * 3 + stat["draws"]  # 승리 3점, 무승부 1점
+                }
+            )
+            if not created:
+                ranking.total_matches = stat["total"]
+                ranking.wins = stat["wins"]
+                ranking.draws = stat["draws"]
+                ranking.losses = stat["losses"]
+                ranking.points = stat["wins"] * 3 + stat["draws"]
+                await ranking.save()
 
     response = {
         "message": "랭킹이 계산되었습니다",

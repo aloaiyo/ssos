@@ -3,7 +3,7 @@
     <!-- 헤더 -->
     <div class="page-header">
       <h1 class="page-title">시즌 관리</h1>
-      <v-btn color="primary" variant="flat" @click="showCreateDialog = true">
+      <v-btn color="primary" variant="flat" @click="openCreateDialog">
         <v-icon left>mdi-plus</v-icon>
         시즌 생성
       </v-btn>
@@ -17,7 +17,7 @@
     <div v-else-if="seasons.length === 0" class="empty-state">
       <v-icon size="64" color="grey-lighten-1">mdi-calendar-blank</v-icon>
       <p class="text-grey mt-4">등록된 시즌이 없습니다</p>
-      <v-btn color="primary" variant="flat" class="mt-4" @click="showCreateDialog = true">
+      <v-btn color="primary" variant="flat" class="mt-4" @click="openCreateDialog">
         첫 시즌 생성하기
       </v-btn>
     </div>
@@ -48,9 +48,14 @@
               <span class="ml-4"><v-icon size="14">mdi-tennis</v-icon> {{ season.match_count || 0 }}개 경기</span>
             </div>
           </div>
-          <v-btn icon variant="text" @click.stop="openEditDialog(season)">
-            <v-icon>mdi-pencil</v-icon>
-          </v-btn>
+          <div class="season-actions">
+            <v-btn icon variant="text" size="small" @click.stop="openEditDialog(season)">
+              <v-icon>mdi-pencil</v-icon>
+            </v-btn>
+            <v-btn icon variant="text" size="small" color="error" @click.stop="confirmDelete(season)">
+              <v-icon>mdi-delete</v-icon>
+            </v-btn>
+          </div>
         </div>
       </v-card>
     </div>
@@ -65,7 +70,9 @@
               v-model="form.name"
               label="시즌 이름"
               :rules="[v => !!v || '시즌 이름을 입력해주세요']"
-              placeholder="예: 2024 상반기 리그"
+              :placeholder="getDefaultSeasonName()"
+              :hint="!isEditing ? `추천: ${getDefaultSeasonName()}` : ''"
+              persistent-hint
               required
             ></v-text-field>
             <v-textarea
@@ -145,7 +152,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useClubStore } from '@/stores/club'
 import { useSeasonStore } from '@/stores/season'
@@ -167,6 +174,34 @@ const formValid = ref(false)
 const formRef = ref(null)
 const editingSeasonId = ref(null)
 const seasonToDelete = ref(null)
+
+// 현재 날짜 기반 기본값 생성
+function getDefaultSeasonName() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth() + 1
+  if (month <= 6) {
+    return `${year}년 상반기`
+  } else {
+    return `${year}년 하반기`
+  }
+}
+
+function getDefaultDates() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth() + 1
+
+  let startDate, endDate
+  if (month <= 6) {
+    startDate = `${year}-01-01`
+    endDate = `${year}-06-30`
+  } else {
+    startDate = `${year}-07-01`
+    endDate = `${year}-12-31`
+  }
+  return { startDate, endDate }
+}
 
 const form = ref({
   name: '',
@@ -210,7 +245,24 @@ function goToSeasonDetail(season) {
   router.push({ name: 'season-detail', params: { seasonId: season.id } })
 }
 
-function openEditDialog(season) {
+async function openCreateDialog() {
+  isEditing.value = false
+  editingSeasonId.value = null
+  const defaults = getDefaultDates()
+  form.value = {
+    name: getDefaultSeasonName(),
+    description: '',
+    start_date: defaults.startDate,
+    end_date: defaults.endDate,
+    status: 'upcoming'
+  }
+  showCreateDialog.value = true
+  // 다이얼로그가 열린 후 폼 검증 실행
+  await nextTick()
+  formRef.value?.validate()
+}
+
+async function openEditDialog(season) {
   isEditing.value = true
   editingSeasonId.value = season.id
   form.value = {
@@ -221,6 +273,9 @@ function openEditDialog(season) {
     status: season.status
   }
   showCreateDialog.value = true
+  // 다이얼로그가 열린 후 폼 검증 실행
+  await nextTick()
+  formRef.value?.validate()
 }
 
 function closeDialog() {
@@ -391,6 +446,11 @@ onMounted(() => {
 .season-stats span {
   display: flex;
   align-items: center;
+  gap: 4px;
+}
+
+.season-actions {
+  display: flex;
   gap: 4px;
 }
 </style>

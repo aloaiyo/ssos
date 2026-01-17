@@ -879,7 +879,13 @@ async function removeParticipant(participant) {
   if (!selectedClub.value?.id || !session.value?.id) return
 
   try {
-    await sessionsApi.removeParticipant(selectedClub.value.id, session.value.id, participant.member?.id)
+    // participant.id를 먼저 사용하고, 없으면 member_id 사용 (백엔드가 둘 다 처리 가능)
+    const participantId = participant.id || participant.member?.id || participant.guest?.id || participant.user?.id
+    if (!participantId) {
+      console.error('참가자 ID를 찾을 수 없습니다')
+      return
+    }
+    await sessionsApi.removeParticipant(selectedClub.value.id, session.value.id, participantId)
     await loadParticipants()
   } catch (error) {
     console.error('참가자 제거 실패:', error)

@@ -191,6 +191,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import apiClient from '@/api'
+import DOMPurify from 'dompurify'
 
 const props = defineProps({
   clubId: {
@@ -268,7 +269,9 @@ function getPreview(content) {
 
 function formatContent(content) {
   if (!content) return ''
-  return content.replace(/\n/g, '<br>')
+  // XSS 방지를 위해 DOMPurify로 sanitize 후 줄바꿈 처리
+  const sanitized = DOMPurify.sanitize(content, { ALLOWED_TAGS: [] })
+  return sanitized.replace(/\n/g, '<br>')
 }
 
 async function loadAnnouncements() {

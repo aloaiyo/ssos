@@ -95,6 +95,47 @@ async def get_session_club_id(session: Session) -> Optional[int]:
     return None
 
 
+def format_participant_data(p, include_team: bool = False) -> dict:
+    """참가자 정보 포맷팅 공통 함수"""
+    data = {
+        "id": p.id,
+        "category": p.participant_category.value,
+    }
+
+    # 이름/성별 정보 추가 (SessionParticipant의 경우)
+    if hasattr(p, 'get_participant_name'):
+        data["name"] = p.get_participant_name()
+        data["gender"] = p.get_participant_gender()
+
+    # 팀 정보 추가 (MatchParticipant의 경우)
+    if include_team and hasattr(p, 'team'):
+        data["team"] = p.team.value
+
+    # 연결된 엔티티 정보
+    if p.club_member:
+        data["member_id"] = p.club_member_id
+        if p.club_member.user:
+            data["user_id"] = p.club_member.user_id
+            if include_team:
+                data["member"] = {
+                    "id": p.club_member.id,
+                    "user": {
+                        "name": p.club_member.user.name,
+                        "gender": p.club_member.user.gender,
+                    }
+                }
+    elif p.guest:
+        data["guest_id"] = p.guest_id
+        if include_team:
+            data["guest"] = {"id": p.guest.id, "name": p.guest.name, "gender": getattr(p.guest, 'gender', None)}
+    elif p.user:
+        data["user_id"] = p.user_id
+        if include_team:
+            data["user"] = {"id": p.user.id, "name": p.user.name, "gender": getattr(p.user, 'gender', None)}
+
+    return data
+
+
 @router.get("")
 async def list_sessions(
     club_id: int,
@@ -211,59 +252,31 @@ async def get_session(
         "matches__result"
     )
 
-    participants = []
-    for p in session.participants:
-        participant_data = {
-            "id": p.id,
-            "category": p.participant_category.value,
-            "name": p.get_participant_name(),
-            "gender": p.get_participant_gender(),
-        }
+    # 공통 함수 사용하여 참가자 포맷팅
+    participants = [format_participant_data(p) for p in session.participants]
 
-        if p.participant_category == ParticipantCategory.MEMBER and p.club_member:
-            participant_data["member_id"] = p.club_member_id
-            participant_data["user_id"] = p.club_member.user_id
-        elif p.participant_category == ParticipantCategory.GUEST and p.guest:
-            participant_data["guest_id"] = p.guest_id
-        elif p.participant_category == ParticipantCategory.ASSOCIATE and p.user:
-            participant_data["user_id"] = p.user_id
-
-        participants.append(participant_data)
-
-    def format_participant(p):
-        """경기 참가자 정보 포맷팅"""
-        data = {
-            "id": p.id,
-            "category": p.participant_category.value,
-            "name": p.get_participant_name(),
-            "gender": p.get_participant_gender(),
-        }
-        if p.participant_category == ParticipantCategory.MEMBER and p.club_member:
-            data["member_id"] = p.club_member_id
-        elif p.participant_category == ParticipantCategory.GUEST and p.guest:
-            data["guest_id"] = p.guest_id
-        elif p.participant_category == ParticipantCategory.ASSOCIATE and p.user:
-            data["user_id"] = p.user_id
-        return data
+    # 배치 쿼리로 모든 경기 결과 조회 (N+1 방지)
+    match_ids = [m.id for m in session.matches]
+    results_map = {}
+    if match_ids:
+        results = await MatchResult.filter(match_id__in=match_ids)
+        results_map = {r.match_id: r for r in results}
 
     matches = []
     for m in session.matches:
         team_a = [p for p in m.participants if p.team == Team.A]
         team_b = [p for p in m.participants if p.team == Team.B]
 
-        # result is a OneToOne relation, prefetched - access via await or get_or_none
-        try:
-            result = await MatchResult.get_or_none(match_id=m.id)
-        except Exception:
-            result = None
+        # prefetch된 결과 사용 (N+1 쿼리 제거)
+        result = results_map.get(m.id)
 
         matches.append({
             "id": m.id,
             "court_number": m.court_number,
             "match_type": m.match_type.value,
             "status": m.status.value,
-            "team_a": [format_participant(p) for p in team_a],
-            "team_b": [format_participant(p) for p in team_b],
+            "team_a": [format_participant_data(p) for p in team_a],
+            "team_b": [format_participant_data(p) for p in team_b],
             "score": {
                 "team_a": result.team_a_score if result else None,
                 "team_b": result.team_b_score if result else None,
@@ -598,7 +611,12 @@ async def create_match(
         category = MatchParticipantCategory(participant_data.category)
 
         if category == MatchParticipantCategory.MEMBER:
-            member = await ClubMember.get_or_none(id=participant_data.member_id, is_deleted=False)
+            # 테넌트 격리: club_id 필터 추가
+            member = await ClubMember.get_or_none(
+                id=participant_data.member_id,
+                club_id=club_id,
+                is_deleted=False
+            )
             if member:
                 await MatchParticipant.create(
                     match=match,
@@ -608,7 +626,12 @@ async def create_match(
                     position=position
                 )
         elif category == MatchParticipantCategory.GUEST:
-            guest = await Guest.get_or_none(id=participant_data.guest_id, is_deleted=False)
+            # 테넌트 격리: club_id 필터 추가
+            guest = await Guest.get_or_none(
+                id=participant_data.guest_id,
+                club_id=club_id,
+                is_deleted=False
+            )
             if guest:
                 await MatchParticipant.create(
                     match=match,
@@ -635,7 +658,8 @@ async def create_match(
     # 하위 호환성: 기존 형식 (team_a_members) 사용
     elif match_data.team_a_members:
         for idx, member_id in enumerate(match_data.team_a_members, 1):
-            member = await ClubMember.get_or_none(id=member_id, is_deleted=False)
+            # 테넌트 격리: club_id 필터 추가
+            member = await ClubMember.get_or_none(id=member_id, club_id=club_id, is_deleted=False)
             if member:
                 await MatchParticipant.create(
                     match=match,
@@ -652,7 +676,8 @@ async def create_match(
     # 하위 호환성: 기존 형식 (team_b_members) 사용
     elif match_data.team_b_members:
         for idx, member_id in enumerate(match_data.team_b_members, 1):
-            member = await ClubMember.get_or_none(id=member_id, is_deleted=False)
+            # 테넌트 격리: club_id 필터 추가
+            member = await ClubMember.get_or_none(id=member_id, club_id=club_id, is_deleted=False)
             if member:
                 await MatchParticipant.create(
                     match=match,
@@ -675,6 +700,18 @@ async def update_match(
 ):
     """경기 결과 업데이트 (자동 저장)"""
     await get_session_or_404(session_id, club_id)
+
+    # 점수 검증
+    if match_data.team_a_score is not None and match_data.team_a_score < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="점수는 0 이상이어야 합니다"
+        )
+    if match_data.team_b_score is not None and match_data.team_b_score < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="점수는 0 이상이어야 합니다"
+        )
 
     match = await Match.get_or_none(id=match_id, session_id=session_id)
     if not match:
@@ -739,32 +776,17 @@ async def list_matches(
         "participants__user"
     ).order_by("match_number")
 
+    # 배치 쿼리로 모든 경기 결과 조회 (N+1 방지)
+    match_ids = [m.id for m in matches]
+    results_map = {}
+    if match_ids:
+        results = await MatchResult.filter(match_id__in=match_ids)
+        results_map = {r.match_id: r for r in results}
+
     result = []
     for m in matches:
-        team_a = [p for p in m.participants if p.team == Team.A]
-        team_b = [p for p in m.participants if p.team == Team.B]
-
-        match_result = await MatchResult.get_or_none(match_id=m.id)
-
-        def format_participant(p):
-            data = {
-                "id": p.id,
-                "category": p.participant_category.value,
-                "team": p.team.value,
-            }
-            if p.club_member:
-                data["member"] = {
-                    "id": p.club_member.id,
-                    "user": {
-                        "name": p.club_member.user.name if p.club_member.user else None,
-                        "gender": p.club_member.user.gender if p.club_member.user else None,
-                    }
-                }
-            elif p.guest:
-                data["guest"] = {"id": p.guest.id, "name": p.guest.name}
-            elif p.user:
-                data["user"] = {"id": p.user.id, "name": p.user.name}
-            return data
+        # prefetch된 결과 사용
+        match_result = results_map.get(m.id)
 
         result.append({
             "id": m.id,
@@ -772,7 +794,7 @@ async def list_matches(
             "court_number": m.court_number,
             "match_type": m.match_type.value,
             "status": m.status.value,
-            "participants": [format_participant(p) for p in m.participants],
+            "participants": [format_participant_data(p, include_team=True) for p in m.participants],
             "score_a": match_result.team_a_score if match_result else None,
             "score_b": match_result.team_b_score if match_result else None,
         })
@@ -795,27 +817,8 @@ async def list_participants(
         "user"
     )
 
-    result = []
-    for p in participants:
-        data = {
-            "id": p.id,
-            "category": p.participant_category.value,
-        }
-        if p.club_member:
-            data["member"] = {
-                "id": p.club_member.id,
-                "user": {
-                    "name": p.club_member.user.name if p.club_member.user else None,
-                    "gender": p.club_member.user.gender if p.club_member.user else None,
-                }
-            }
-        elif p.guest:
-            data["guest"] = {"id": p.guest.id, "name": p.guest.name, "gender": p.guest.gender}
-        elif p.user:
-            data["user"] = {"id": p.user.id, "name": p.user.name, "gender": p.user.gender}
-        result.append(data)
-
-    return result
+    # 공통 함수 사용하여 참가자 포맷팅
+    return [format_participant_data(p, include_team=True) for p in participants]
 
 
 @router.delete("/{session_id}")
@@ -957,6 +960,32 @@ async def generate_matches(
 
         for i, team in enumerate([Team.A, Team.A, Team.B, Team.B]):
             p = males.pop(0)
+            await MatchParticipant.create(
+                match=match,
+                club_member=p.club_member,
+                guest=p.guest,
+                user=p.user,
+                participant_category=p.participant_category,
+                team=team,
+                position=1
+            )
+
+        matches_created.append(match.id)
+
+    # 여자 복식 생성
+    while len(females) >= 4:
+        match_number += 1
+        match = await Match.create(
+            session=session,
+            match_number=match_number,
+            court_number=(match_number - 1) % session.num_courts + 1,
+            scheduled_time=session.start_time,
+            match_type=MatchType.WOMENS_DOUBLES,
+            status=MatchStatus.SCHEDULED
+        )
+
+        for i, team in enumerate([Team.A, Team.A, Team.B, Team.B]):
+            p = females.pop(0)
             await MatchParticipant.create(
                 match=match,
                 club_member=p.club_member,
