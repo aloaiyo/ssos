@@ -116,4 +116,56 @@ export default {
   updateMatch(clubId, sessionId, matchId, matchData) {
     return apiClient.put(`/clubs/${clubId}/sessions/${sessionId}/matches/${matchId}`, matchData)
   },
+
+  /**
+   * 현재 사용자가 세션에 참가
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @returns {Promise}
+   */
+  joinSession(clubId, sessionId) {
+    return apiClient.post(`/clubs/${clubId}/sessions/${sessionId}/join`)
+  },
+
+  /**
+   * 현재 사용자가 세션에서 불참
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @returns {Promise}
+   */
+  leaveSession(clubId, sessionId) {
+    return apiClient.delete(`/clubs/${clubId}/sessions/${sessionId}/join`)
+  },
+
+  /**
+   * 현재 사용자의 세션 참가 여부 확인
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @returns {Promise} { is_participating, is_member, member_id, participant_id }
+   */
+  getMyParticipation(clubId, sessionId) {
+    return apiClient.get(`/clubs/${clubId}/sessions/${sessionId}/my-participation`)
+  },
+
+  /**
+   * AI 기반 경기 자동 생성 (미리보기)
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @param {Object} options - { mode: 'balanced'|'random', match_duration_minutes, break_duration_minutes }
+   * @returns {Promise} 생성된 경기 미리보기
+   */
+  generateAIMatches(clubId, sessionId, options = {}) {
+    return apiClient.post(`/clubs/${clubId}/sessions/${sessionId}/matches/generate-ai`, options)
+  },
+
+  /**
+   * AI 생성 경기 확정
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @param {Array} matches - 확정할 경기 목록
+   * @returns {Promise}
+   */
+  confirmAIMatches(clubId, sessionId, matches) {
+    return apiClient.post(`/clubs/${clubId}/sessions/${sessionId}/matches/confirm-ai`, { matches })
+  },
 }

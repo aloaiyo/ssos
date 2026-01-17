@@ -53,6 +53,14 @@
       <v-divider class="mx-4 mb-2"></v-divider>
       <v-list nav density="comfortable" class="px-2 pb-4">
         <v-list-item
+          prepend-icon="mdi-account-outline"
+          rounded="lg"
+          class="nav-item mb-1"
+          :to="{ name: 'my-profile' }"
+        >
+          <v-list-item-title class="nav-item-title">내 정보</v-list-item-title>
+        </v-list-item>
+        <v-list-item
           prepend-icon="mdi-cog-outline"
           rounded="lg"
           class="nav-item"
@@ -114,6 +122,7 @@ const scheduleMenuItems = [
   { title: '시즌', icon: 'mdi-calendar-star', to: { name: 'season-list' } },
   { title: '세션', icon: 'mdi-calendar-outline', to: { name: 'session-list' } },
   { title: '경기 기록', icon: 'mdi-tennis', to: { name: 'match-list' } },
+  { title: '결과지 업로드', icon: 'mdi-camera-document', to: { name: 'match-upload' } },
   { title: '랭킹', icon: 'mdi-trophy-outline', to: { name: 'ranking-list' } },
 ]
 

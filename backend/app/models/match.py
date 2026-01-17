@@ -9,6 +9,7 @@ from enum import Enum
 class MatchType(str, Enum):
     """경기 타입"""
     MENS_DOUBLES = "mens_doubles"
+    WOMENS_DOUBLES = "womens_doubles"
     MIXED_DOUBLES = "mixed_doubles"
     SINGLES = "singles"
 

@@ -34,6 +34,25 @@
             <v-icon>mdi-pencil</v-icon>
           </v-btn>
         </div>
+
+        <!-- 참가/불참 토글 버튼 -->
+        <div class="participation-section" v-if="myParticipation?.is_member">
+          <v-btn
+            :color="myParticipation?.is_participating ? 'error' : 'primary'"
+            :variant="myParticipation?.is_participating ? 'outlined' : 'flat'"
+            :loading="isTogglingParticipation"
+            @click="toggleParticipation"
+            block
+            class="mt-4"
+          >
+            <v-icon start>{{ myParticipation?.is_participating ? 'mdi-account-minus' : 'mdi-account-plus' }}</v-icon>
+            {{ myParticipation?.is_participating ? '참가 취소' : '참가하기' }}
+          </v-btn>
+          <p v-if="myParticipation?.is_participating" class="participation-status text-success mt-2">
+            <v-icon size="16">mdi-check-circle</v-icon>
+            참가 중입니다
+          </p>
+        </div>
       </div>
 
       <!-- 탭 메뉴 -->
@@ -98,12 +117,11 @@
               color="primary"
               variant="flat"
               size="small"
-              @click="generateMatches"
-              :loading="isGenerating"
-              :disabled="participants.length < 2"
+              @click="showAIGenerateDialog = true"
+              :disabled="participants.length < 4"
             >
-              <v-icon start size="18">mdi-auto-fix</v-icon>
-              경기 자동생성
+              <v-icon start size="18">mdi-robot</v-icon>
+              AI 경기생성
             </v-btn>
           </div>
 
@@ -114,10 +132,11 @@
               color="primary"
               variant="flat"
               class="mt-3"
-              @click="generateMatches"
-              :disabled="participants.length < 2"
+              @click="showAIGenerateDialog = true"
+              :disabled="participants.length < 4"
             >
-              경기 자동생성
+              <v-icon start>mdi-robot</v-icon>
+              AI 경기생성
             </v-btn>
           </div>
 
@@ -350,6 +369,139 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- AI 경기 생성 설정 다이얼로그 -->
+    <v-dialog v-model="showAIGenerateDialog" max-width="450">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon color="primary" class="mr-2">mdi-robot</v-icon>
+          AI 경기 생성
+        </v-card-title>
+        <v-card-text>
+          <p class="text-grey mb-4">참가자: {{ participants.length }}명</p>
+
+          <v-radio-group v-model="aiGenerateForm.mode" label="매칭 방식" class="mb-4">
+            <v-radio value="balanced">
+              <template v-slot:label>
+                <div>
+                  <strong>실력 균형</strong>
+                  <p class="text-grey text-caption">랭킹/승률 기반으로 팀 밸런스 조정</p>
+                </div>
+              </template>
+            </v-radio>
+            <v-radio value="random">
+              <template v-slot:label>
+                <div>
+                  <strong>완전 랜덤</strong>
+                  <p class="text-grey text-caption">무작위로 팀 구성</p>
+                </div>
+              </template>
+            </v-radio>
+          </v-radio-group>
+
+          <v-divider class="mb-4"></v-divider>
+
+          <div class="d-flex gap-3">
+            <v-text-field
+              v-model.number="aiGenerateForm.match_duration_minutes"
+              label="경기 시간 (분)"
+              type="number"
+              min="10"
+              max="60"
+              density="compact"
+              variant="outlined"
+            ></v-text-field>
+            <v-text-field
+              v-model.number="aiGenerateForm.break_duration_minutes"
+              label="휴식 시간 (분)"
+              type="number"
+              min="0"
+              max="30"
+              density="compact"
+              variant="outlined"
+            ></v-text-field>
+          </div>
+
+          <v-alert v-if="aiGenerateError" type="error" density="compact" class="mt-3">
+            {{ aiGenerateError }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="showAIGenerateDialog = false">취소</v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            :loading="isAIGenerating"
+            @click="generateAIMatches"
+          >
+            <v-icon start>mdi-creation</v-icon>
+            생성하기
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- AI 경기 미리보기 다이얼로그 -->
+    <v-dialog v-model="showAIPreviewDialog" max-width="600" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon color="success" class="mr-2">mdi-check-circle</v-icon>
+          경기 미리보기
+        </v-card-title>
+        <v-card-subtitle v-if="aiPreviewData?.summary">
+          총 {{ aiPreviewData.summary.total_matches }}경기
+          (남복 {{ aiPreviewData.summary.mens_doubles_matches || 0 }},
+          여복 {{ aiPreviewData.summary.womens_doubles_matches || 0 }},
+          혼복 {{ aiPreviewData.summary.mixed_doubles_matches || 0 }})
+        </v-card-subtitle>
+        <v-card-text class="pa-0" style="max-height: 400px;">
+          <v-list density="compact">
+            <v-list-item
+              v-for="(match, index) in aiPreviewData?.matches || []"
+              :key="index"
+              class="ai-preview-match"
+            >
+              <template v-slot:prepend>
+                <v-chip
+                  :color="getMatchTypeColor(match.match_type)"
+                  size="x-small"
+                  variant="tonal"
+                  class="mr-2"
+                >
+                  {{ getMatchTypeLabel(match.match_type) }}
+                </v-chip>
+              </template>
+              <v-list-item-title class="d-flex align-center justify-space-between">
+                <span class="team-names">{{ match.team_a?.player_names?.join(', ') || '-' }}</span>
+                <span class="vs-text mx-2">vs</span>
+                <span class="team-names">{{ match.team_b?.player_names?.join(', ') || '-' }}</span>
+              </v-list-item-title>
+              <v-list-item-subtitle>
+                {{ match.scheduled_time }} | 코트 {{ match.court_number }}
+              </v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn variant="text" @click="showAIPreviewDialog = false">취소</v-btn>
+          <v-btn variant="outlined" @click="regenerateAIMatches">
+            <v-icon start>mdi-refresh</v-icon>
+            다시 생성
+          </v-btn>
+          <v-spacer></v-spacer>
+          <v-btn
+            color="primary"
+            variant="flat"
+            :loading="isConfirmingAI"
+            @click="confirmAIMatches"
+          >
+            <v-icon start>mdi-check</v-icon>
+            확정하기
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -371,12 +523,27 @@ const session = ref(null)
 const participants = ref([])
 const matches = ref([])
 const clubMembers = ref([])
+const myParticipation = ref(null)
 
 const activeTab = ref('participants')
 const isGenerating = ref(false)
 const isSaving = ref(false)
 const isDeleting = ref(false)
 const isSavingScore = ref(false)
+const isTogglingParticipation = ref(false)
+
+// AI 경기 생성
+const showAIGenerateDialog = ref(false)
+const showAIPreviewDialog = ref(false)
+const isAIGenerating = ref(false)
+const isConfirmingAI = ref(false)
+const aiGenerateError = ref('')
+const aiPreviewData = ref(null)
+const aiGenerateForm = ref({
+  mode: 'balanced',
+  match_duration_minutes: 30,
+  break_duration_minutes: 5
+})
 
 // 세션 수정
 const showEditDialog = ref(false)
@@ -454,6 +621,7 @@ function getSessionTypeLabel(type) {
 function getMatchTypeColor(type) {
   const colors = {
     mens_doubles: 'blue',
+    womens_doubles: 'pink',
     mixed_doubles: 'purple',
     singles: 'green'
   }
@@ -463,6 +631,7 @@ function getMatchTypeColor(type) {
 function getMatchTypeLabel(type) {
   const labels = {
     mens_doubles: '남복',
+    womens_doubles: '여복',
     mixed_doubles: '혼복',
     singles: '단식'
   }
@@ -562,7 +731,8 @@ async function loadSession() {
     await Promise.all([
       loadParticipants(),
       loadMatches(),
-      loadClubMembers()
+      loadClubMembers(),
+      loadMyParticipation()
     ])
   } catch (error) {
     console.error('세션 조회 실패:', error)
@@ -601,6 +771,41 @@ async function loadClubMembers() {
   } catch (error) {
     console.error('회원 목록 조회 실패:', error)
     clubMembers.value = []
+  }
+}
+
+async function loadMyParticipation() {
+  if (!selectedClub.value?.id || !session.value?.id) return
+  try {
+    const response = await sessionsApi.getMyParticipation(selectedClub.value.id, session.value.id)
+    myParticipation.value = response.data
+  } catch (error) {
+    console.error('참가 여부 조회 실패:', error)
+    myParticipation.value = null
+  }
+}
+
+async function toggleParticipation() {
+  if (!selectedClub.value?.id || !session.value?.id) return
+
+  isTogglingParticipation.value = true
+  try {
+    if (myParticipation.value?.is_participating) {
+      // 참가 취소
+      await sessionsApi.leaveSession(selectedClub.value.id, session.value.id)
+      myParticipation.value = { ...myParticipation.value, is_participating: false }
+    } else {
+      // 참가
+      await sessionsApi.joinSession(selectedClub.value.id, session.value.id)
+      myParticipation.value = { ...myParticipation.value, is_participating: true }
+    }
+    // 참가자 목록 새로고침
+    await loadParticipants()
+  } catch (error) {
+    console.error('참가 상태 변경 실패:', error)
+    alert(error.response?.data?.detail || '참가 상태 변경에 실패했습니다')
+  } finally {
+    isTogglingParticipation.value = false
   }
 }
 
@@ -693,6 +898,60 @@ async function generateMatches() {
     console.error('경기 생성 실패:', error)
   } finally {
     isGenerating.value = false
+  }
+}
+
+async function generateAIMatches() {
+  if (!selectedClub.value?.id || !session.value?.id) return
+
+  isAIGenerating.value = true
+  aiGenerateError.value = ''
+
+  try {
+    const response = await sessionsApi.generateAIMatches(
+      selectedClub.value.id,
+      session.value.id,
+      {
+        mode: aiGenerateForm.value.mode,
+        match_duration_minutes: aiGenerateForm.value.match_duration_minutes,
+        break_duration_minutes: aiGenerateForm.value.break_duration_minutes
+      }
+    )
+    aiPreviewData.value = response.data
+    showAIGenerateDialog.value = false
+    showAIPreviewDialog.value = true
+  } catch (error) {
+    console.error('AI 경기 생성 실패:', error)
+    aiGenerateError.value = error.response?.data?.detail || 'AI 경기 생성에 실패했습니다'
+  } finally {
+    isAIGenerating.value = false
+  }
+}
+
+async function regenerateAIMatches() {
+  showAIPreviewDialog.value = false
+  showAIGenerateDialog.value = true
+}
+
+async function confirmAIMatches() {
+  if (!selectedClub.value?.id || !session.value?.id || !aiPreviewData.value?.matches) return
+
+  isConfirmingAI.value = true
+  try {
+    await sessionsApi.confirmAIMatches(
+      selectedClub.value.id,
+      session.value.id,
+      aiPreviewData.value.matches
+    )
+    showAIPreviewDialog.value = false
+    aiPreviewData.value = null
+    await loadMatches()
+    activeTab.value = 'matches'
+  } catch (error) {
+    console.error('경기 확정 실패:', error)
+    alert(error.response?.data?.detail || '경기 확정에 실패했습니다')
+  } finally {
+    isConfirmingAI.value = false
   }
 }
 
@@ -979,5 +1238,44 @@ onMounted(() => {
 .time-chip {
   min-width: 60px;
   justify-content: center;
+}
+
+/* 참가 섹션 */
+.participation-section {
+  border-top: 1px solid #E2E8F0;
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.participation-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+/* AI 미리보기 스타일 */
+.ai-preview-match {
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.ai-preview-match:last-child {
+  border-bottom: none;
+}
+
+.team-names {
+  font-size: 0.9rem;
+  flex: 1;
+}
+
+.vs-text {
+  color: #94A3B8;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.gap-3 {
+  gap: 12px;
 }
 </style>

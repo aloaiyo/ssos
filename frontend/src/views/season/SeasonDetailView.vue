@@ -201,6 +201,7 @@
           </v-form>
         </v-card-text>
         <v-card-actions>
+          <v-btn color="error" variant="text" @click="confirmDeleteSeason">삭제</v-btn>
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="showEditDialog = false">취소</v-btn>
           <v-btn
@@ -212,6 +213,23 @@
           >
             수정
           </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- 시즌 삭제 확인 다이얼로그 -->
+    <v-dialog v-model="showDeleteDialog" max-width="400">
+      <v-card>
+        <v-card-title>시즌 삭제</v-card-title>
+        <v-card-text>
+          <strong>{{ season?.name }}</strong> 시즌을 삭제하시겠습니까?
+          <br /><br />
+          <span class="text-error">이 시즌에 속한 모든 세션과 경기 기록도 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</span>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="showDeleteDialog = false">취소</v-btn>
+          <v-btn color="error" variant="flat" :loading="isDeleting" @click="deleteSeason">삭제</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -377,6 +395,10 @@ const editForm = ref({
   status: 'upcoming'
 })
 
+// 시즌 삭제
+const showDeleteDialog = ref(false)
+const isDeleting = ref(false)
+
 // 세션 생성
 const showSessionDialog = ref(false)
 const showDatePicker = ref(false)
@@ -521,6 +543,27 @@ async function saveSeason() {
     console.error('시즌 수정 실패:', error)
   } finally {
     isSaving.value = false
+  }
+}
+
+function confirmDeleteSeason() {
+  showEditDialog.value = false
+  showDeleteDialog.value = true
+}
+
+async function deleteSeason() {
+  if (!selectedClub.value?.id || !season.value?.id) return
+
+  isDeleting.value = true
+  try {
+    await seasonStore.deleteSeason(selectedClub.value.id, season.value.id)
+    showDeleteDialog.value = false
+    router.push({ name: 'season-list' })
+  } catch (error) {
+    console.error('시즌 삭제 실패:', error)
+    alert(error.response?.data?.detail || '시즌 삭제에 실패했습니다')
+  } finally {
+    isDeleting.value = false
   }
 }
 

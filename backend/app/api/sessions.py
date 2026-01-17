@@ -433,6 +433,110 @@ async def remove_participant(
     return {"message": "참가자가 제거되었습니다"}
 
 
+@router.post("/{session_id}/join")
+async def join_session(
+    club_id: int,
+    session_id: int,
+    current_user: User = Depends(get_current_active_user)
+):
+    """현재 사용자가 세션에 참가 (회원 자신이 참가 신청)"""
+    session = await get_session_or_404(session_id, club_id)
+
+    # 현재 사용자의 클럽 멤버십 확인
+    member = await ClubMember.get_or_none(
+        club_id=club_id,
+        user=current_user,
+        is_deleted=False,
+        status=MemberStatus.ACTIVE
+    )
+
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="이 동호회의 활성 회원만 참가할 수 있습니다"
+        )
+
+    # 이미 참가 중인지 확인
+    existing = await SessionParticipant.get_or_none(session=session, club_member=member)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미 참가 중입니다"
+        )
+
+    await SessionParticipant.create(
+        session=session,
+        club_member=member,
+        participant_category=ParticipantCategory.MEMBER
+    )
+
+    return {"message": "세션에 참가했습니다", "is_participating": True}
+
+
+@router.delete("/{session_id}/join")
+async def leave_session(
+    club_id: int,
+    session_id: int,
+    current_user: User = Depends(get_current_active_user)
+):
+    """현재 사용자가 세션에서 불참 (회원 자신이 참가 취소)"""
+    session = await get_session_or_404(session_id, club_id)
+
+    # 현재 사용자의 클럽 멤버십 확인
+    member = await ClubMember.get_or_none(
+        club_id=club_id,
+        user=current_user,
+        is_deleted=False
+    )
+
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="이 동호회의 회원이 아닙니다"
+        )
+
+    # 참가 중인지 확인
+    participant = await SessionParticipant.get_or_none(session=session, club_member=member)
+    if not participant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="참가 중이 아닙니다"
+        )
+
+    await participant.delete()
+    return {"message": "참가를 취소했습니다", "is_participating": False}
+
+
+@router.get("/{session_id}/my-participation")
+async def get_my_participation(
+    club_id: int,
+    session_id: int,
+    current_user: User = Depends(get_current_active_user)
+):
+    """현재 사용자의 세션 참가 여부 확인"""
+    session = await get_session_or_404(session_id, club_id)
+
+    # 현재 사용자의 클럽 멤버십 확인
+    member = await ClubMember.get_or_none(
+        club_id=club_id,
+        user=current_user,
+        is_deleted=False
+    )
+
+    if not member:
+        return {"is_participating": False, "is_member": False}
+
+    # 참가 중인지 확인
+    participant = await SessionParticipant.get_or_none(session=session, club_member=member)
+
+    return {
+        "is_participating": participant is not None,
+        "is_member": True,
+        "member_id": member.id,
+        "participant_id": participant.id if participant else None
+    }
+
+
 @router.post("/{session_id}/participants/{member_id}")
 async def add_member_participant(
     club_id: int,
@@ -866,3 +970,204 @@ async def generate_matches(
         matches_created.append(match.id)
 
     return {"message": f"{len(matches_created)}개의 경기가 생성되었습니다", "match_ids": matches_created}
+
+
+class AIMatchGenerateRequest(PydanticBase):
+    """AI 경기 생성 요청"""
+    mode: str = Field("balanced", pattern="^(balanced|random)$")  # balanced: 실력 균형, random: 완전 랜덤
+    match_duration_minutes: Optional[int] = Field(None, ge=10, le=120)
+    break_duration_minutes: Optional[int] = Field(None, ge=0, le=30)
+
+
+class AIMatchConfirmRequest(PydanticBase):
+    """AI 생성 경기 확정 요청"""
+    matches: List[dict]
+
+
+@router.post("/{session_id}/matches/generate-ai")
+async def generate_ai_matches(
+    club_id: int,
+    session_id: int,
+    request: AIMatchGenerateRequest,
+    membership: ClubMember = Depends(require_club_manager)
+):
+    """
+    AI 기반 경기 자동 생성 (미리보기)
+
+    - mode: "balanced" (실력 균형) 또는 "random" (완전 랜덤)
+    - 생성된 매치를 미리보기로 반환하며, 확정하려면 confirm-ai 엔드포인트를 호출해야 합니다
+    """
+    from app.services.ai_matching_service import ai_matching_service
+    from app.models.ranking import Ranking
+
+    # 세션 검증 및 데이터 로드
+    await get_session_or_404(session_id, club_id)
+    session = await Session.get(id=session_id).prefetch_related(
+        "event", "season", "participants__club_member__user",
+        "participants__guest", "participants__user"
+    )
+
+    if len(session.participants) < 4:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="최소 4명의 참가자가 필요합니다 (복식 경기 1개)"
+        )
+
+    # 참가자 정보 수집 (랭킹 포함)
+    participants_data = []
+    for p in session.participants:
+        participant_info = {
+            "id": p.id,
+            "name": p.get_participant_name(),
+            "gender": p.get_participant_gender(),
+            "match_type": p.participation_type.value if p.participation_type else None,
+            "ranking": {"points": 0, "wins": 0, "losses": 0, "win_rate": 0}
+        }
+
+        # 회원인 경우 랭킹 정보 조회
+        if p.club_member:
+            ranking = await Ranking.get_or_none(club_id=club_id, club_member_id=p.club_member_id)
+            if ranking:
+                participant_info["ranking"] = {
+                    "points": ranking.points,
+                    "wins": ranking.wins,
+                    "losses": ranking.losses,
+                    "win_rate": ranking.win_rate
+                }
+
+        # match_type이 없으면 성별에 따라 기본값 설정
+        if not participant_info["match_type"]:
+            gender = participant_info["gender"]
+            if gender == "male":
+                participant_info["match_type"] = "mens_doubles"
+            elif gender == "female":
+                participant_info["match_type"] = "womens_doubles"
+            else:
+                participant_info["match_type"] = "mixed_doubles"
+
+        participants_data.append(participant_info)
+
+    # 세션 설정
+    session_config = {
+        "start_time": session.start_time.strftime("%H:%M"),
+        "end_time": session.end_time.strftime("%H:%M"),
+        "match_duration": request.match_duration_minutes or session.match_duration_minutes or 30,
+        "break_duration": request.break_duration_minutes if request.break_duration_minutes is not None else (session.break_duration_minutes or 5),
+        "num_courts": session.num_courts
+    }
+
+    try:
+        result = await ai_matching_service.generate_matches(
+            participants=participants_data,
+            session_config=session_config,
+            mode=request.mode
+        )
+
+        return {
+            "preview": True,
+            "mode": request.mode,
+            "session_config": session_config,
+            "matches": result["matches"],
+            "summary": result["summary"]
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"AI 매칭 생성 실패: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="경기 생성 중 오류가 발생했습니다"
+        )
+
+
+@router.post("/{session_id}/matches/confirm-ai")
+async def confirm_ai_matches(
+    club_id: int,
+    session_id: int,
+    request: AIMatchConfirmRequest,
+    membership: ClubMember = Depends(require_club_manager)
+):
+    """
+    AI 생성 경기 확정
+
+    - generate-ai에서 받은 matches를 확정하여 실제 경기로 생성합니다
+    - 기존 경기는 모두 삭제됩니다
+    """
+    session = await get_session_or_404(session_id, club_id)
+
+    # 기존 경기 삭제
+    await Match.filter(session_id=session_id).delete()
+
+    # 참가자 매핑 (ID -> 실제 참가자)
+    participants = await SessionParticipant.filter(session_id=session_id).prefetch_related(
+        "club_member", "guest", "user"
+    )
+    participant_map = {p.id: p for p in participants}
+
+    matches_created = []
+    for match_data in request.matches:
+        # 매치 타입 변환
+        match_type_map = {
+            "mens_doubles": MatchType.MENS_DOUBLES,
+            "womens_doubles": MatchType.WOMENS_DOUBLES,
+            "mixed_doubles": MatchType.MIXED_DOUBLES
+        }
+        match_type = match_type_map.get(match_data.get("match_type"), MatchType.MENS_DOUBLES)
+
+        # 예약 시간 파싱
+        scheduled_time_str = match_data.get("scheduled_time", session.start_time.strftime("%H:%M"))
+        try:
+            hour, minute = map(int, scheduled_time_str.split(":"))
+            scheduled_time = time(hour, minute)
+        except:
+            scheduled_time = session.start_time
+
+        # 경기 생성
+        match = await Match.create(
+            session_id=session_id,
+            match_number=match_data.get("match_number", len(matches_created) + 1),
+            court_number=match_data.get("court_number", 1),
+            scheduled_time=scheduled_time,
+            match_type=match_type,
+            status=MatchStatus.SCHEDULED
+        )
+
+        # 팀 A 참가자 추가
+        team_a_ids = match_data.get("team_a", {}).get("player_ids", [])
+        for idx, player_id in enumerate(team_a_ids, 1):
+            participant = participant_map.get(player_id)
+            if participant:
+                await MatchParticipant.create(
+                    match=match,
+                    club_member=participant.club_member,
+                    guest=participant.guest,
+                    user=participant.user,
+                    participant_category=participant.participant_category,
+                    team=Team.A,
+                    position=idx
+                )
+
+        # 팀 B 참가자 추가
+        team_b_ids = match_data.get("team_b", {}).get("player_ids", [])
+        for idx, player_id in enumerate(team_b_ids, 1):
+            participant = participant_map.get(player_id)
+            if participant:
+                await MatchParticipant.create(
+                    match=match,
+                    club_member=participant.club_member,
+                    guest=participant.guest,
+                    user=participant.user,
+                    participant_category=participant.participant_category,
+                    team=Team.B,
+                    position=idx
+                )
+
+        matches_created.append(match.id)
+
+    return {
+        "message": f"{len(matches_created)}개의 경기가 생성되었습니다",
+        "match_ids": matches_created
+    }

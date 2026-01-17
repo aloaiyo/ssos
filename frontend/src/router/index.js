@@ -118,11 +118,30 @@ const routes = [
     component: () => import('@/views/match/MatchScheduleView.vue'),
     meta: { requiresAuth: true },
   },
+  {
+    path: '/match-results',
+    name: 'match-results',
+    component: () => import('@/views/match/MatchResultView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/match-upload',
+    name: 'match-upload',
+    component: () => import('@/views/match/MatchUploadView.vue'),
+    meta: { requiresAuth: true },
+  },
   // 랭킹
   {
     path: '/rankings',
     name: 'ranking-list',
     component: () => import('@/views/ranking/RankingView.vue'),
+    meta: { requiresAuth: true },
+  },
+  // 내 정보
+  {
+    path: '/profile',
+    name: 'my-profile',
+    component: () => import('@/views/profile/MyProfileView.vue'),
     meta: { requiresAuth: true },
   },
   // 404

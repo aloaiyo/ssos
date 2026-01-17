@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
+    # Google Gemini API
+    GEMINI_API_KEY: str = ""
+
     # AWS Cognito 설정
     COGNITO_USER_POOL_ID: str = ""
     COGNITO_CLIENT_ID: str = ""
@@ -106,6 +109,11 @@ class Settings(BaseSettings):
             cors_origins = get_ssm_parameter(f"{self.SSM_PREFIX}/cors_origins")
             if cors_origins:
                 self.CORS_ORIGINS = cors_origins
+
+            # Gemini API Key
+            gemini_api_key = get_ssm_parameter(f"{self.SSM_PREFIX}/gemini_api_key")
+            if gemini_api_key:
+                self.GEMINI_API_KEY = gemini_api_key
 
             print("SSM 설정 로드 완료")
 
