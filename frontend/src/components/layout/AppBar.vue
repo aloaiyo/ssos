@@ -218,12 +218,12 @@ function handleClubChange(clubId) {
 
 // 프로필 페이지로 이동
 function goToProfile() {
-  console.log('프로필 페이지')
+  router.push({ name: 'my-profile' })
 }
 
-// 설정 페이지로 이동
+// 설정 페이지로 이동 (프로필과 동일)
 function goToSettings() {
-  console.log('설정 페이지')
+  router.push({ name: 'my-profile' })
 }
 
 // 로그아웃

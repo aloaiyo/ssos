@@ -12,6 +12,8 @@ from app.schemas.user import (
     CognitoCallbackRequest,
 )
 from app.models.user import User, UserRole, SubscriptionTier
+from app.models.member import ClubMember, MemberStatus
+from typing import List, Optional
 from app.services.cognito_service import CognitoService
 from app.core.security import (
     create_access_token,
@@ -427,3 +429,148 @@ async def check_auth(request: Request):
     """
     token = request.cookies.get("access_token")
     return {"authenticated": token is not None}
+
+
+# ============ 클럽 멤버십 관련 스키마 ============
+
+from pydantic import BaseModel, ConfigDict
+
+
+class ClubMembershipResponse(BaseModel):
+    """클럽 멤버십 응답"""
+    id: int
+    club_id: int
+    club_name: str
+    nickname: Optional[str]
+    gender: str
+    role: str
+    status: str
+    total_games: int
+    wins: int
+    losses: int
+    win_rate: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ClubMembershipUpdate(BaseModel):
+    """클럽 멤버십 수정 요청"""
+    nickname: Optional[str] = None
+    gender: Optional[str] = None
+
+
+# ============ 클럽 멤버십 API ============
+
+@router.get("/me/memberships", response_model=List[ClubMembershipResponse])
+async def get_my_memberships(current_user: User = Depends(get_current_active_user)):
+    """
+    내가 가입한 모든 클럽 멤버십 조회
+    """
+    memberships = await ClubMember.filter(
+        user=current_user,
+        status=MemberStatus.ACTIVE,
+        is_deleted=False
+    ).prefetch_related("club")
+
+    return [ClubMembershipResponse(
+        id=m.id,
+        club_id=m.club_id,
+        club_name=m.club.name,
+        nickname=m.nickname,
+        gender=m.gender.value,
+        role=m.role.value,
+        status=m.status.value,
+        total_games=m.total_games,
+        wins=m.wins,
+        losses=m.losses,
+        win_rate=m.win_rate
+    ) for m in memberships]
+
+
+@router.get("/me/memberships/{club_id}", response_model=ClubMembershipResponse)
+async def get_my_membership_in_club(
+    club_id: int,
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    특정 클럽에서의 내 멤버십 조회
+    """
+    membership = await ClubMember.get_or_none(
+        user=current_user,
+        club_id=club_id,
+        is_deleted=False
+    ).prefetch_related("club")
+
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="해당 클럽의 멤버십을 찾을 수 없습니다"
+        )
+
+    return ClubMembershipResponse(
+        id=membership.id,
+        club_id=membership.club_id,
+        club_name=membership.club.name,
+        nickname=membership.nickname,
+        gender=membership.gender.value,
+        role=membership.role.value,
+        status=membership.status.value,
+        total_games=membership.total_games,
+        wins=membership.wins,
+        losses=membership.losses,
+        win_rate=membership.win_rate
+    )
+
+
+@router.put("/me/memberships/{club_id}", response_model=ClubMembershipResponse)
+async def update_my_membership_in_club(
+    club_id: int,
+    update_data: ClubMembershipUpdate,
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    특정 클럽에서의 내 프로필 수정 (닉네임, 성별)
+    """
+    membership = await ClubMember.get_or_none(
+        user=current_user,
+        club_id=club_id,
+        is_deleted=False
+    ).prefetch_related("club")
+
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="해당 클럽의 멤버십을 찾을 수 없습니다"
+        )
+
+    # 업데이트할 데이터가 있으면 적용
+    update_dict = update_data.model_dump(exclude_unset=True)
+
+    if "nickname" in update_dict:
+        membership.nickname = update_dict["nickname"]
+
+    if "gender" in update_dict and update_dict["gender"]:
+        from app.models.member import Gender
+        try:
+            membership.gender = Gender(update_dict["gender"])
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="유효하지 않은 성별입니다. 가능한 값: male, female"
+            )
+
+    await membership.save()
+
+    return ClubMembershipResponse(
+        id=membership.id,
+        club_id=membership.club_id,
+        club_name=membership.club.name,
+        nickname=membership.nickname,
+        gender=membership.gender.value,
+        role=membership.role.value,
+        status=membership.status.value,
+        total_games=membership.total_games,
+        wins=membership.wins,
+        losses=membership.losses,
+        win_rate=membership.win_rate
+    )

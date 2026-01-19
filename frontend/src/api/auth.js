@@ -148,4 +148,34 @@ export default {
     const response = await apiClient.post('/auth/callback', { code })
     return response
   },
+
+  /**
+   * 내 클럽 멤버십 목록 조회
+   * @returns {Promise} 클럽 멤버십 목록
+   */
+  async getMyMemberships() {
+    const response = await apiClient.get('/auth/me/memberships')
+    return response
+  },
+
+  /**
+   * 특정 클럽에서의 내 멤버십 조회
+   * @param {number} clubId - 동호회 ID
+   * @returns {Promise} 클럽 멤버십 정보
+   */
+  async getMyMembershipInClub(clubId) {
+    const response = await apiClient.get(`/auth/me/memberships/${clubId}`)
+    return response
+  },
+
+  /**
+   * 특정 클럽에서의 내 프로필 수정 (닉네임, 성별)
+   * @param {number} clubId - 동호회 ID
+   * @param {Object} data - { nickname?, gender? }
+   * @returns {Promise} 수정된 클럽 멤버십 정보
+   */
+  async updateMyMembershipInClub(clubId, data) {
+    const response = await apiClient.put(`/auth/me/memberships/${clubId}`, data)
+    return response
+  },
 }
