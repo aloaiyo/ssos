@@ -59,7 +59,9 @@ poetry run pytest tests/test_matching_service.py  # Single file
 ```bash
 npm run dev      # Dev server
 npm run build    # Production build
-npm run lint     # Linting
+npm run preview  # Preview production build
+npm run lint     # ESLint 검사
+npm run lint:fix # ESLint 자동 수정
 ```
 
 ## Architecture
@@ -234,6 +236,23 @@ VITE_COGNITO_REDIRECT_URI=http://localhost:3000/auth/callback
 VITE_COGNITO_SIGN_OUT_URI=http://localhost:3000
 ```
 
+## Security Patterns
+
+### XSS Prevention
+사용자 입력 콘텐츠를 `v-html`로 렌더링할 때는 반드시 DOMPurify로 sanitize:
+```javascript
+import DOMPurify from 'dompurify'
+
+function formatContent(content) {
+  const sanitized = DOMPurify.sanitize(content, { ALLOWED_TAGS: [] })
+  return sanitized.replace(/\n/g, '<br>')
+}
+```
+
+### Production Build
+- `console.log`는 프로덕션 빌드에서 자동 제거 (vite.config.js의 esbuild.drop 설정)
+- ESLint에서 `no-console` 규칙으로 개발 중 경고
+
 ## Common Gotchas
 
 - **Aerich**: Run `migrate` before `upgrade` after model changes
@@ -243,6 +262,8 @@ VITE_COGNITO_SIGN_OUT_URI=http://localhost:3000
 - **Cookies**: Frontend must use `withCredentials: true` for Axios; Backend CORS must allow credentials
 - **CORS**: Backend 8000, Frontend 3000 - configured in `config.py` with `allow_credentials=True`
 - **Frontend ports**: Vite may use 5173 if 3000 is taken; update CORS_ORIGINS accordingly
+- **v-html**: 사용자 입력을 v-html로 렌더링 시 반드시 DOMPurify 사용 (XSS 방지)
+- **ESLint**: ESLint 9 flat config 사용 (`eslint.config.js`), 기존 `.eslintrc` 형식 사용 불가
 
 ## API Documentation
 
@@ -252,5 +273,14 @@ Key endpoints:
 - `POST /api/auth/callback` - Cognito OAuth callback (sets cookie)
 - `POST /api/auth/logout` - Clear auth cookie
 - `GET /api/auth/me` - Current user info
-- `POST /api/sessions/{id}/matches/generate` - Auto-generate matches
+- `POST /api/clubs/{club_id}/sessions/{id}/matches/generate` - Auto-generate matches
 - `GET /api/clubs/{id}/seasons` - List seasons for a club
+
+## Detailed Documentation
+
+상세 문서는 `claudedocs/` 디렉토리를 참조하세요:
+- [PROJECT_INDEX.md](./claudedocs/PROJECT_INDEX.md) - 프로젝트 종합 인덱스
+- [BACKEND_ARCHITECTURE.md](./claudedocs/BACKEND_ARCHITECTURE.md) - 백엔드 아키텍처 상세
+- [FRONTEND_ARCHITECTURE.md](./claudedocs/FRONTEND_ARCHITECTURE.md) - 프론트엔드 아키텍처 상세
+- [API_REFERENCE.md](./claudedocs/API_REFERENCE.md) - API 엔드포인트 레퍼런스
+- [DATA_MODEL.md](./claudedocs/DATA_MODEL.md) - 데이터 모델 및 관계

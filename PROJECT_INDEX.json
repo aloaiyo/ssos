@@ -1,0 +1,175 @@
+{
+  "project": {
+    "name": "테니스 동호회 관리 시스템 (SSOS)",
+    "generated": "2026-01-19",
+    "tech_stack": {
+      "backend": ["FastAPI", "Tortoise-ORM", "PostgreSQL", "AWS Cognito"],
+      "frontend": ["Vue 3", "Vuetify 3", "Pinia", "Axios"]
+    },
+    "total_lines": 25792,
+    "backend_lines": 8030,
+    "frontend_lines": 17762
+  },
+  "structure": {
+    "backend": {
+      "total_files": 48,
+      "entry_point": "backend/app/main.py",
+      "models": 13,
+      "schemas": 9,
+      "routers": 14,
+      "services": 5
+    },
+    "frontend": {
+      "total_files": 64,
+      "entry_point": "frontend/src/main.js",
+      "views": 31,
+      "components": 8,
+      "stores": 7,
+      "api_clients": 12,
+      "routes": 42
+    }
+  },
+  "core_modules": {
+    "services": {
+      "matching_service": {
+        "path": "backend/app/services/matching_service.py",
+        "purpose": "Auto match generation algorithm",
+        "exports": ["create_matches_for_session"]
+      },
+      "ai_matching_service": {
+        "path": "backend/app/services/ai_matching_service.py",
+        "purpose": "AI-powered intelligent matching",
+        "exports": ["generate_ai_matches"]
+      },
+      "auth_service": {
+        "path": "backend/app/services/auth_service.py",
+        "purpose": "Cognito token exchange, user sync",
+        "exports": ["sync_user_from_cognito_code", "create_user_token"]
+      },
+      "cognito_service": {
+        "path": "backend/app/services/cognito_service.py",
+        "purpose": "AWS Cognito API wrapper",
+        "exports": ["CognitoService"]
+      },
+      "ocr_service": {
+        "path": "backend/app/services/ocr_service.py",
+        "purpose": "Score image OCR (Gemini AI)",
+        "exports": ["extract_scores_from_image"]
+      }
+    },
+    "core": {
+      "security": {
+        "path": "backend/app/core/security.py",
+        "exports": ["create_access_token", "create_refresh_token", "verify_access_token"]
+      },
+      "dependencies": {
+        "path": "backend/app/core/dependencies.py",
+        "exports": ["get_current_user", "require_club_member", "require_club_manager", "ClubPermission"]
+      }
+    }
+  },
+  "models": [
+    {"name": "User", "file": "user.py", "key_fields": ["email", "cognito_sub", "role", "subscription_tier"]},
+    {"name": "Club", "file": "club.py", "key_fields": ["name", "location", "created_by"]},
+    {"name": "ClubMember", "file": "member.py", "key_fields": ["club", "user", "role", "status", "gender"]},
+    {"name": "Season", "file": "season.py", "key_fields": ["club", "name", "start_date", "end_date", "status"]},
+    {"name": "SeasonRanking", "file": "season.py", "key_fields": ["season", "club_member", "points", "rank"]},
+    {"name": "Session", "file": "event.py", "key_fields": ["event", "season", "date", "start_time", "num_courts"]},
+    {"name": "SessionParticipant", "file": "event.py", "key_fields": ["session", "club_member", "guest", "user", "category"]},
+    {"name": "Match", "file": "match.py", "key_fields": ["session", "match_type", "court", "status"]},
+    {"name": "MatchParticipant", "file": "match.py", "key_fields": ["match", "club_member", "guest", "user", "team"]},
+    {"name": "MatchResult", "file": "match.py", "key_fields": ["match", "team_a_score", "team_b_score", "winner_team"]},
+    {"name": "Guest", "file": "guest.py", "key_fields": ["club", "name", "gender"]},
+    {"name": "Ranking", "file": "ranking.py", "key_fields": ["club", "club_member", "points"]},
+    {"name": "Announcement", "file": "announcement.py", "key_fields": ["club", "author", "title", "content"]}
+  ],
+  "api_routers": [
+    {"name": "auth", "prefix": "/api/auth", "key_endpoints": ["callback", "logout", "me", "refresh"]},
+    {"name": "clubs", "prefix": "/api/clubs", "key_endpoints": ["CRUD", "join", "leave"]},
+    {"name": "members", "prefix": "/api/clubs/{id}/members", "key_endpoints": ["approve", "role"]},
+    {"name": "guests", "prefix": "/api/clubs/{id}/guests", "key_endpoints": ["CRUD", "link"]},
+    {"name": "seasons", "prefix": "/api/clubs/{id}/seasons", "key_endpoints": ["CRUD", "rankings"]},
+    {"name": "sessions", "prefix": "/api/clubs/{id}/sessions", "key_endpoints": ["CRUD", "participants", "generate", "generate-ai"]},
+    {"name": "matches", "prefix": "/api/matches", "key_endpoints": ["CRUD", "result"]},
+    {"name": "rankings", "prefix": "/api/clubs/{id}/rankings", "key_endpoints": ["list", "calculate"]},
+    {"name": "announcements", "prefix": "/api/clubs/{id}/announcements", "key_endpoints": ["CRUD"]},
+    {"name": "fees", "prefix": "/api/clubs/{id}/fees", "key_endpoints": ["settings", "payments"]},
+    {"name": "events", "prefix": "/api/clubs/{id}/events", "key_endpoints": ["CRUD"]},
+    {"name": "users", "prefix": "/api/users", "key_endpoints": ["me/clubs"]},
+    {"name": "ocr", "prefix": "/api/ocr", "key_endpoints": ["extract", "save-matches"]}
+  ],
+  "frontend_stores": [
+    {"name": "auth", "lines": 244, "key_state": ["user", "isAuthenticated"], "key_actions": ["login", "logout", "handleCallback"]},
+    {"name": "club", "lines": 222, "key_state": ["clubs", "selectedClubId"], "key_actions": ["fetchClubs", "selectClub"]},
+    {"name": "session", "lines": 279, "key_state": ["sessions", "participants"], "key_actions": ["fetchSessions", "addParticipant"]},
+    {"name": "season", "lines": 209, "key_state": ["seasons", "rankings"], "key_actions": ["fetchSeasons", "calculateRankings"]},
+    {"name": "match", "lines": 168, "key_state": ["matches", "currentMatch"], "key_actions": ["generateMatches", "recordResult"]},
+    {"name": "member", "lines": 148, "key_state": ["members"], "key_actions": ["fetchMembers", "updateRole"]},
+    {"name": "ranking", "lines": 94, "key_state": ["rankings"], "key_actions": ["fetchRankings"]}
+  ],
+  "frontend_views": {
+    "auth": ["LoginView", "RegisterView", "VerifyEmailView", "CallbackView", "ProfileCompletionView"],
+    "club": ["ClubListView", "ClubDetailView", "ClubCreateView", "ClubManageView", "ClubInfoTab", "MemberManagementTab", "SessionManagementTab", "AnnouncementTab", "FeeManagementTab", "ClubStatsTab"],
+    "season": ["SeasonListView", "SeasonDetailView"],
+    "session": ["SessionListView", "SessionDetailView", "SessionCreateView"],
+    "match": ["MatchScheduleView", "MatchGenerateView", "MatchResultView", "MatchUploadView"],
+    "member": ["MemberListView", "MemberManageView"],
+    "ranking": ["RankingView"],
+    "other": ["LandingView", "HomeView", "MyProfileView", "NotFoundView"]
+  },
+  "enums": {
+    "UserRole": ["USER", "SUPER_ADMIN"],
+    "SubscriptionTier": ["FREE", "PREMIUM"],
+    "MemberRole": ["MANAGER", "MEMBER", "GUEST"],
+    "MemberStatus": ["PENDING", "ACTIVE", "INACTIVE", "LEFT", "BANNED"],
+    "Gender": ["MALE", "FEMALE"],
+    "MatchType": ["MENS_DOUBLES", "WOMENS_DOUBLES", "MIXED_DOUBLES", "SINGLES"],
+    "MatchStatus": ["SCHEDULED", "IN_PROGRESS", "COMPLETED"],
+    "ParticipantCategory": ["MEMBER", "GUEST", "ASSOCIATE"],
+    "SeasonStatus": ["UPCOMING", "ACTIVE", "COMPLETED"]
+  },
+  "key_patterns": {
+    "authentication": "AWS Cognito → HTTP-only Cookie (withCredentials: true)",
+    "multi_tenant": "Club as tenant boundary, filter by club_id",
+    "soft_delete": "is_deleted field on all models",
+    "pydantic_v2": "model_config = ConfigDict(from_attributes=True)",
+    "security": ["DOMPurify for XSS prevention", "ESLint no-console", "console.log removal in production"]
+  },
+  "dependencies": {
+    "backend": {
+      "fastapi": "^0.109.0",
+      "tortoise-orm": "^0.20.0",
+      "aerich": "^0.7.2",
+      "pydantic": "^2.5.0",
+      "boto3": "^1.34.0",
+      "python-jose": "^3.3.0",
+      "google-genai": "^1.59.0"
+    },
+    "frontend": {
+      "vue": "^3.4.21",
+      "vuetify": "^3.5.7",
+      "pinia": "^2.1.7",
+      "vue-router": "^4.3.0",
+      "axios": "^1.6.7",
+      "dayjs": "^1.11.10",
+      "dompurify": "^3.3.1",
+      "eslint": "^9.39.2"
+    }
+  },
+  "development_status": {
+    "phase_1": {"status": "completed", "features": ["Auth", "Club CRUD", "Members", "Layout"]},
+    "phase_2": {"status": "completed", "features": ["Season", "Session", "Match", "Ranking", "AI Matching", "OCR"]},
+    "phase_3": {"status": "planned", "features": ["Algorithm optimization", "Drag & Drop", "Advanced Stats"]}
+  },
+  "documentation": {
+    "main": "CLAUDE.md",
+    "project_index": "PROJECT_INDEX.md",
+    "detailed": [
+      "claudedocs/PROJECT_INDEX.md",
+      "claudedocs/BACKEND_ARCHITECTURE.md",
+      "claudedocs/FRONTEND_ARCHITECTURE.md",
+      "claudedocs/API_REFERENCE.md",
+      "claudedocs/DATA_MODEL.md"
+    ]
+  }
+}

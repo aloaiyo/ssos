@@ -121,7 +121,6 @@
             color="primary"
             variant="flat"
             :loading="isSaving"
-            :disabled="!formValid"
             @click="saveSeason"
           >
             {{ isEditing ? '수정' : '생성' }}
@@ -292,7 +291,16 @@ function closeDialog() {
 }
 
 async function saveSeason() {
-  if (!selectedClub.value?.id) return
+  if (!selectedClub.value?.id) {
+    alert('동호회를 선택해주세요')
+    return
+  }
+
+  // 폼 검증
+  const { valid } = await formRef.value.validate()
+  if (!valid) {
+    return
+  }
 
   isSaving.value = true
   try {
@@ -304,6 +312,7 @@ async function saveSeason() {
     closeDialog()
   } catch (error) {
     console.error('시즌 저장 실패:', error)
+    alert(error.response?.data?.detail || '시즌 저장에 실패했습니다')
   } finally {
     isSaving.value = false
   }
@@ -315,7 +324,10 @@ function confirmDelete(season) {
 }
 
 async function deleteSeason() {
-  if (!selectedClub.value?.id || !seasonToDelete.value) return
+  if (!selectedClub.value?.id || !seasonToDelete.value) {
+    alert('동호회 또는 시즌 정보가 없습니다')
+    return
+  }
 
   isDeleting.value = true
   try {
@@ -324,6 +336,7 @@ async function deleteSeason() {
     seasonToDelete.value = null
   } catch (error) {
     console.error('시즌 삭제 실패:', error)
+    alert(error.response?.data?.detail || '시즌 삭제에 실패했습니다')
   } finally {
     isDeleting.value = false
   }
