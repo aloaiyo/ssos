@@ -3,7 +3,7 @@
 """
 from typing import Optional
 from app.models.user import User
-from app.core.security import create_access_token, create_refresh_token, verify_token
+from app.core.security import create_access_token, create_refresh_token, decode_token
 from app.services.cognito_service import CognitoService
 from datetime import timedelta
 from app.config import settings
@@ -76,22 +76,11 @@ async def sync_user_from_cognito_code(code: str) -> User:
     return user
 
 
-from app.core.security import create_access_token, create_refresh_token, verify_token
-
-# ... (existing imports)
-
-
 def create_user_token(user_id: int) -> dict:
     """사용자 토큰 생성 (Access + Refresh)"""
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": str(user_id)}, expires_delta=access_token_expires
-    )
-    
-    refresh_token = create_refresh_token(
-        data={"sub": str(user_id)}
-    )
-    
+    access_token = create_access_token(user_id=user_id)
+    refresh_token = create_refresh_token(user_id=user_id)
+
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -101,24 +90,21 @@ def create_user_token(user_id: int) -> dict:
 
 async def refresh_access_token(refresh_token: str) -> dict:
     """리프레시 토큰으로 액세스 토큰 갱신"""
-    payload = verify_token(refresh_token)
+    payload = decode_token(refresh_token)
     if not payload or payload.get("type") != "refresh":
         raise ValueError("유효하지 않은 리프레시 토큰입니다")
-        
+
     user_id = payload.get("sub")
     if not user_id:
         raise ValueError("토큰에서 사용자 정보를 찾을 수 없습니다")
-        
+
     # 사용자 존재 여부 확인
     user = await User.get_or_none(id=int(user_id))
     if not user:
         raise ValueError("사용자를 찾을 수 없습니다")
-        
+
     # 새 액세스 토큰 생성
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": str(user_id)}, expires_delta=access_token_expires
-    )
+    access_token = create_access_token(user_id=int(user_id))
     
     # 리프레시 토큰은 그대로 반환 (또는 로테이션 정책 적용 가능)
     return {

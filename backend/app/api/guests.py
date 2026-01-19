@@ -16,6 +16,8 @@ from app.models.club import Club
 from app.models.guest import Guest
 from app.models.member import ClubMember, MemberRole, MemberStatus, Gender
 from app.models.user import User
+from app.models.match import MatchParticipant, ParticipantCategory
+from app.models.event import SessionParticipant
 from app.core.dependencies import (
     get_current_active_user,
     require_club_manager,
@@ -280,8 +282,26 @@ async def link_guest_to_member(
             target_member.draws += guest.draws
             await target_member.save()
 
-            # TODO: MatchParticipant 등의 참조도 업데이트 필요
-            # 현재는 통계만 이전
+            # MatchParticipant 참조 업데이트: guest → club_member
+            match_participants = await MatchParticipant.filter(
+                guest_id=guest.id,
+                is_deleted=False
+            )
+            for mp in match_participants:
+                mp.guest = None
+                mp.club_member = target_member
+                mp.participant_category = ParticipantCategory.MEMBER
+                await mp.save()
+
+            # SessionParticipant 참조 업데이트: guest → club_member
+            session_participants = await SessionParticipant.filter(
+                guest_id=guest.id,
+                is_deleted=False
+            )
+            for sp in session_participants:
+                sp.guest = None
+                sp.club_member = target_member
+                await sp.save()
 
     return {
         "message": "게스트가 회원과 연결되었습니다",
