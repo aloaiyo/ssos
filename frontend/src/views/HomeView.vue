@@ -75,7 +75,7 @@
             <h2 class="club-name">{{ selectedClub.name }}</h2>
             <p class="club-description">{{ selectedClub.description || '우리 동호회에 오신 것을 환영합니다!' }}</p>
           </div>
-          <div class="hero-stats">
+          <div v-if="isManagerOfSelectedClub" class="hero-stats">
             <div class="hero-stat">
               <span class="stat-value">{{ stats.totalMembers }}</span>
               <span class="stat-label">회원</span>
