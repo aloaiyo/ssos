@@ -27,4 +27,10 @@ async def get_my_clubs(current_user: User = Depends(get_current_active_user)):
         "my_role": m.role.value,
         "member_count": await ClubMember.filter(club=m.club, status=MemberStatus.ACTIVE, is_deleted=False).count(),
         "created_at": serialize_to_kst(m.club.created_at),
+        # 동호회 기본 설정값
+        "location": m.club.location,
+        "default_num_courts": m.club.default_num_courts,
+        "default_match_duration": m.club.default_match_duration,
+        "default_break_duration": m.club.default_break_duration,
+        "default_warmup_duration": m.club.default_warmup_duration,
     } for m in memberships if not m.club.is_deleted]
