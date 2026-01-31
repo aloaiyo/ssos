@@ -1,26 +1,38 @@
 """
 Gemini AI를 사용한 경기 매칭 서비스
+
+google-genai SDK 사용 (pip install google-genai)
+https://ai.google.dev/gemini-api/docs
 """
 import json
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import time, datetime, timedelta
-from google import genai
-from google.genai import types
-from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Lazy import to avoid import errors when API key is not set
+_client = None
+
+
+def _get_client():
+    """Lazy initialization of Gemini client"""
+    global _client
+    if _client is None:
+        from app.config import settings
+        if not settings.GEMINI_API_KEY:
+            raise ValueError("GEMINI_API_KEY가 설정되지 않았습니다")
+
+        from google import genai
+        _client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    return _client
 
 
 class AIMatchingService:
     """AI 기반 경기 매칭 서비스"""
 
     def __init__(self):
-        self.client = None
-        if settings.GEMINI_API_KEY:
-            self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        else:
-            logger.warning("GEMINI_API_KEY가 설정되지 않았습니다")
+        pass  # Lazy initialization - client created on first use
 
     async def generate_matches(
         self,
@@ -39,8 +51,7 @@ class AIMatchingService:
         Returns:
             생성된 매치 목록
         """
-        if not self.client:
-            raise ValueError("Gemini API가 설정되지 않았습니다. GEMINI_API_KEY를 확인하세요.")
+        client = _get_client()
 
         # 참가자를 경기 유형별로 분류
         mens_doubles = [p for p in participants if p.get("match_type") == "mens_doubles"]
@@ -55,10 +66,13 @@ class AIMatchingService:
             mode=mode
         )
 
+        result_text = ""
         try:
-            response = self.client.models.generate_content(
-                model='gemini-2.0-flash-lite',
-                contents=[types.Content(parts=[types.Part(text=prompt)])]
+            # google-genai SDK 사용 (최신 API 문서 기반)
+            # https://ai.google.dev/gemini-api/docs
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',  # 최신 모델, 비용 효율적
+                contents=prompt  # 단순 텍스트는 직접 전달 가능
             )
 
             result_text = response.text.strip()
