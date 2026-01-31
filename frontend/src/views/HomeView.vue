@@ -174,27 +174,6 @@
           <span class="action-label">동호회 관리</span>
         </div>
 
-        <div
-          class="bento-item bento-action glass-card hover-lift"
-          @click="router.push({ name: 'member-list' })"
-        >
-          <div class="action-icon gradient-secondary">
-            <v-icon>mdi-account-group</v-icon>
-          </div>
-          <span class="action-label">회원 목록</span>
-        </div>
-
-        <div
-          v-if="isAdmin"
-          class="bento-item bento-action glass-card hover-lift"
-          @click="router.push({ name: 'member-manage' })"
-        >
-          <div class="action-icon gradient-accent">
-            <v-icon>mdi-account-cog</v-icon>
-          </div>
-          <span class="action-label">회원 관리</span>
-        </div>
-
         <!-- Top 5 랭킹 카드 -->
         <div class="bento-item bento-ranking glass-card">
           <div class="card-header">
