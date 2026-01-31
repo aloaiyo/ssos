@@ -167,8 +167,17 @@ DELETE /api/clubs/{club_id}/sessions/{id}
 ### 참가자 관리
 ```
 GET    /api/clubs/{club_id}/sessions/{id}/participants
-POST   /api/clubs/{club_id}/sessions/{id}/participants
+POST   /api/clubs/{club_id}/sessions/{id}/participants        # 참가자 추가
+POST   /api/clubs/{club_id}/sessions/{id}/participants/{member_id}  # 회원 간편 추가
 DELETE /api/clubs/{club_id}/sessions/{id}/participants/{pid}
+POST   /api/clubs/{club_id}/sessions/{id}/join                # 본인 참가
+DELETE /api/clubs/{club_id}/sessions/{id}/join                # 본인 불참
+GET    /api/clubs/{club_id}/sessions/{id}/my-participation    # 본인 참가 여부
+```
+
+### 스케줄 계산
+```
+POST   /api/clubs/{club_id}/sessions/calculate-schedule       # 스케줄 미리보기 계산
 ```
 
 ### 자동 매칭 생성
@@ -187,30 +196,28 @@ POST /api/clubs/{club_id}/sessions/{id}/matches/confirm-ai     # AI 매칭 확�
 
 ## 경기 (Matches)
 
-### 경기 목록
+### 세션 내 경기 (세션 컨텍스트)
 ```
-GET /api/matches?session_id=1
-```
-
-### 경기 CRUD
-```
-POST   /api/matches
-GET    /api/matches/{id}
-PUT    /api/matches/{id}
-DELETE /api/matches/{id}
+GET    /api/clubs/{club_id}/sessions/{session_id}/matches           # 세션의 경기 목록
+POST   /api/clubs/{club_id}/sessions/{session_id}/matches           # 경기 생성
+PUT    /api/clubs/{club_id}/sessions/{session_id}/matches/{id}      # 경기 결과 업데이트
+POST   /api/clubs/{club_id}/sessions/{session_id}/matches/generate  # 경기 자동 생성
+POST   /api/clubs/{club_id}/sessions/{session_id}/matches/generate-ai    # AI 매칭 미리보기
+POST   /api/clubs/{club_id}/sessions/{session_id}/matches/confirm-ai     # AI 매칭 확정
 ```
 
-### 경기 참가자
+### 단일 경기 (클럽 컨텍스트)
 ```
-GET  /api/matches/{id}/participants
-POST /api/matches/{id}/participants
+GET    /api/clubs/{club_id}/matches/{match_id}              # 경기 상세 조회
+PUT    /api/clubs/{club_id}/matches/{match_id}              # 경기 수정
+DELETE /api/clubs/{club_id}/matches/{match_id}              # 경기 삭제
 ```
 
-### 경기 결과
+### 경기 참가자 & 결과
 ```
-GET  /api/matches/{id}/result
-POST /api/matches/{id}/result
-PUT  /api/matches/{id}/result
+GET    /api/clubs/{club_id}/matches/{match_id}/participants # 참가자 목록
+POST   /api/clubs/{club_id}/matches/{match_id}/result       # 결과 등록
+GET    /api/clubs/{club_id}/matches/{match_id}/result       # 결과 조회
 ```
 
 **Body (결과 등록):**
@@ -226,10 +233,17 @@ PUT  /api/matches/{id}/result
 
 ## 랭킹 (Rankings)
 
-### 전체 랭킹 (시즌 독립)
+### 동호회 전체 랭킹
 ```
-GET /api/rankings?club_id=1
-GET /api/rankings/{id}
+GET    /api/clubs/{club_id}/rankings                    # 동호회 랭킹 목록
+GET    /api/clubs/{club_id}/rankings/{member_id}        # 회원 랭킹 상세
+POST   /api/clubs/{club_id}/rankings/update             # 랭킹 갱신
+```
+
+### 시즌 랭킹
+```
+GET    /api/clubs/{club_id}/seasons/{season_id}/rankings          # 시즌 랭킹 조회
+POST   /api/clubs/{club_id}/seasons/{season_id}/rankings/calculate # 시즌 랭킹 계산
 ```
 
 ---
@@ -267,11 +281,11 @@ PUT  /api/clubs/{club_id}/fee-payments/{id}
 ## 일정 (Events)
 
 ```
-GET    /api/events?club_id=1
-POST   /api/events
-GET    /api/events/{id}
-PUT    /api/events/{id}
-DELETE /api/events/{id}
+GET    /api/clubs/{club_id}/events
+POST   /api/clubs/{club_id}/events
+GET    /api/clubs/{club_id}/events/{event_id}
+PUT    /api/clubs/{club_id}/events/{event_id}
+DELETE /api/clubs/{club_id}/events/{event_id}
 ```
 
 ---
@@ -327,4 +341,4 @@ POST /api/ocr/save-matches   # OCR 결과로 경기 저장
 
 ---
 
-*Last Updated: 2026-01-19*
+*Last Updated: 2026-01-31*

@@ -1220,7 +1220,8 @@ async function saveSession() {
     closeCreateDialog()
   } catch (error) {
     console.error('세션 저장 실패:', error)
-    alert('세션 저장에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '세션 저장에 실패했습니다.'
+    alert(errorMessage)
   } finally {
     isSaving.value = false
   }
@@ -1237,7 +1238,8 @@ async function confirmDeleteSession() {
     await loadSessions()
   } catch (error) {
     console.error('세션 삭제 실패:', error)
-    alert('세션 삭제에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '세션 삭제에 실패했습니다.'
+    alert(errorMessage)
   }
 }
 
@@ -1254,7 +1256,8 @@ async function addMemberParticipant(memberId) {
     selectedMemberId.value = null
   } catch (error) {
     console.error('회원 참가자 추가 실패:', error)
-    alert('참가자 추가에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '참가자 추가에 실패했습니다.'
+    alert(errorMessage)
   }
 }
 
@@ -1270,7 +1273,8 @@ async function addGuestParticipant(guestId) {
     selectedGuestId.value = null
   } catch (error) {
     console.error('게스트 참가자 추가 실패:', error)
-    alert('참가자 추가에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '참가자 추가에 실패했습니다.'
+    alert(errorMessage)
   }
 }
 
@@ -1282,7 +1286,8 @@ async function removeParticipant(participantId) {
     await selectSession(selectedSessionId.value)
   } catch (error) {
     console.error('참가자 제거 실패:', error)
-    alert('참가자 제거에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '참가자 제거에 실패했습니다.'
+    alert(errorMessage)
   }
 }
 
@@ -1308,7 +1313,8 @@ async function saveGuest() {
     closeGuestDialog()
   } catch (error) {
     console.error('게스트 저장 실패:', error)
-    alert('게스트 등록에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '게스트 등록에 실패했습니다.'
+    alert(errorMessage)
   } finally {
     isSavingGuest.value = false
   }
@@ -1324,7 +1330,8 @@ async function autoGenerateMatches() {
     await loadSessions()
   } catch (error) {
     console.error('경기 자동 생성 실패:', error)
-    alert('경기 자동 생성에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '경기 자동 생성에 실패했습니다.'
+    alert(errorMessage)
   }
 }
 
@@ -1370,7 +1377,8 @@ async function createMatch() {
     closeMatchDialog()
   } catch (error) {
     console.error('경기 생성 실패:', error)
-    alert('경기 생성에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '경기 생성에 실패했습니다.'
+    alert(errorMessage)
   }
 }
 
@@ -1382,7 +1390,8 @@ async function deleteMatch(matchId) {
     await selectSession(selectedSessionId.value)
   } catch (error) {
     console.error('경기 삭제 실패:', error)
-    alert('경기 삭제에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '경기 삭제에 실패했습니다.'
+    alert(errorMessage)
   }
 }
 

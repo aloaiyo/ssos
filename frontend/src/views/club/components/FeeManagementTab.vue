@@ -431,7 +431,8 @@ async function saveSetting() {
     showSettingDialog.value = false
   } catch (error) {
     console.error('저장 실패:', error)
-    alert('저장에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '저장에 실패했습니다.'
+    alert(errorMessage)
   } finally {
     isSavingSetting.value = false
   }
@@ -450,7 +451,8 @@ async function deleteSetting(id) {
     await loadSettings()
   } catch (error) {
     console.error('삭제 실패:', error)
-    alert('삭제에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '삭제에 실패했습니다.'
+    alert(errorMessage)
   }
 }
 
@@ -471,7 +473,8 @@ async function generatePayments() {
     await loadPayments()
   } catch (error) {
     console.error('생성 실패:', error)
-    alert('납부 기록 생성에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '납부 기록 생성에 실패했습니다.'
+    alert(errorMessage)
   } finally {
     isGenerating.value = false
   }
@@ -512,7 +515,8 @@ async function savePayment() {
     showPaymentDialog.value = false
   } catch (error) {
     console.error('저장 실패:', error)
-    alert('저장에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '저장에 실패했습니다.'
+    alert(errorMessage)
   } finally {
     isSavingPayment.value = false
   }

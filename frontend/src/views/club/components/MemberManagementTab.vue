@@ -331,7 +331,8 @@ async function approveMember(memberId) {
     await loadMembers()
   } catch (error) {
     console.error('승인 실패:', error)
-    alert('승인에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '승인에 실패했습니다.'
+    alert(errorMessage)
   }
 }
 
@@ -343,7 +344,8 @@ async function rejectMember(memberId) {
     await loadMembers()
   } catch (error) {
     console.error('거절 실패:', error)
-    alert('거절에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '거절에 실패했습니다.'
+    alert(errorMessage)
   }
 }
 
@@ -365,7 +367,8 @@ async function changeRole() {
     showRoleDialog.value = false
   } catch (error) {
     console.error('역할 변경 실패:', error)
-    alert('역할 변경에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '역할 변경에 실패했습니다.'
+    alert(errorMessage)
   }
 }
 
@@ -377,7 +380,8 @@ async function confirmRemove(member) {
     await loadMembers()
   } catch (error) {
     console.error('내보내기 실패:', error)
-    alert('내보내기에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '내보내기에 실패했습니다.'
+    alert(errorMessage)
   }
 }
 

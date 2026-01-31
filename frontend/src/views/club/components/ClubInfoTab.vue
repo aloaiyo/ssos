@@ -486,7 +486,8 @@ async function handleSubmit() {
     isEditing.value = false
   } catch (error) {
     console.error('저장 실패:', error)
-    alert('저장에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '저장에 실패했습니다.'
+    alert(errorMessage)
   } finally {
     isLoading.value = false
   }
@@ -502,7 +503,8 @@ async function handleDelete() {
     router.push({ name: 'home' })
   } catch (error) {
     console.error('삭제 실패:', error)
-    alert('삭제에 실패했습니다.')
+    const errorMessage = error.response?.data?.detail || '삭제에 실패했습니다.'
+    alert(errorMessage)
   } finally {
     isDeleting.value = false
   }

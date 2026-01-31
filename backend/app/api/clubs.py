@@ -26,7 +26,11 @@ async def get_club_with_schedules(club: Club) -> dict:
         "is_deleted": club.is_deleted,
         "default_num_courts": club.default_num_courts,
         "default_match_duration": club.default_match_duration,
+        "default_break_duration": club.default_break_duration,
+        "default_warmup_duration": club.default_warmup_duration,
         "location": club.location,
+        "is_join_allowed": club.is_join_allowed,
+        "requires_approval": club.requires_approval,
         "schedules": [ScheduleResponse.model_validate(s) for s in schedules],
     }
     return club_dict
