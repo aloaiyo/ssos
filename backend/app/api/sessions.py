@@ -175,12 +175,12 @@ async def list_sessions(
     if season_id:
         sessions = await Session.filter(
             season_id=season_id, is_deleted=False
-        ).prefetch_related("season", "participants__club_member__user").order_by("-date")
+        ).prefetch_related("season", "participants__club_member__user").order_by("-start_datetime")
     else:
         # 기존 이벤트 기반 조회 (하위 호환성)
         sessions = await Session.filter(
             event__club=club, is_deleted=False
-        ).prefetch_related("event", "season", "participants__club_member__user").order_by("-date")
+        ).prefetch_related("event", "season", "participants__club_member__user").order_by("-start_datetime")
 
     return [{
         "id": s.id,

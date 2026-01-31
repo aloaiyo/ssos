@@ -168,7 +168,7 @@ async def get_season(
     # 세션 목록 조회 - prefetch 활용
     sessions = await Session.filter(
         season=season, is_deleted=False
-    ).prefetch_related("participants").order_by("-date")
+    ).prefetch_related("participants").order_by("-start_datetime")
 
     session_ids = [s.id for s in sessions]
 

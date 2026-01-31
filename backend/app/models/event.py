@@ -156,10 +156,10 @@ class Session(BaseModel):
 
     class Meta:
         table = "sessions"
-        ordering = ["-date", "-start_time"]
+        ordering = ["-start_datetime"]
 
     def __str__(self) -> str:
-        return f"{self.event.title} - {self.date} {self.start_time}"
+        return f"Session #{self.id} - {self.date} {self.start_time}"
 
 
 class SessionParticipant(BaseModel):

@@ -79,9 +79,9 @@
                     </v-chip>
                   </div>
                   <div class="session-meta">
-                    <span v-if="session.session_date" class="meta-item">
+                    <span v-if="session.date" class="meta-item">
                       <v-icon size="14">mdi-calendar</v-icon>
-                      {{ formatDateTime(session.session_date) }}
+                      {{ formatDate(session.date) }} {{ session.start_time ? session.start_time.substring(0, 5) : '' }}
                     </span>
                     <span v-if="session.location" class="meta-item">
                       <v-icon size="14">mdi-map-marker</v-icon>

@@ -447,8 +447,7 @@ async function createSession() {
       end_time: sessionForm.value.end_time,
       location: sessionForm.value.location || null,
       num_courts: sessionForm.value.num_courts,
-      match_duration_minutes: sessionForm.value.match_duration_minutes,
-      notes: sessionForm.value.notes || null
+      match_duration_minutes: sessionForm.value.match_duration_minutes
     })
     closeCreateDialog()
     await loadSessions()
