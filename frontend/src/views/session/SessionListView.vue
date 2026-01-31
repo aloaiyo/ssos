@@ -353,6 +353,23 @@ function goToToday() {
 }
 
 function selectDay(day) {
+  // 세션이 없는 날짜 클릭 시 (매니저만 생성 다이얼로그 열기)
+  if (day.sessions.length === 0) {
+    if (isManager.value) {
+      openCreateDialogForDate(day.date)
+    } else {
+      selectedDay.value = day
+    }
+    return
+  }
+
+  // 세션이 1개인 날짜 클릭 시 세션 상세로 이동
+  if (day.sessions.length === 1) {
+    goToSession(day.sessions[0])
+    return
+  }
+
+  // 세션이 2개 이상인 경우 목록 표시
   selectedDay.value = day
 }
 
