@@ -8,6 +8,10 @@ from app.models.event import Event, SessionConfig, Session, SessionParticipant
 from app.models.match import Match, MatchParticipant, MatchResult
 from app.models.ranking import Ranking
 from app.models.schedule import ClubSchedule
+from app.models.season import Season, SeasonRanking
+from app.models.guest import Guest
+from app.models.fee import FeeSetting, FeePayment
+from app.models.announcement import Announcement
 
 __all__ = [
     "User",
@@ -22,4 +26,10 @@ __all__ = [
     "MatchResult",
     "Ranking",
     "ClubSchedule",
+    "Season",
+    "SeasonRanking",
+    "Guest",
+    "FeeSetting",
+    "FeePayment",
+    "Announcement",
 ]
