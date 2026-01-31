@@ -16,6 +16,7 @@ from app.core.dependencies import (
     require_club_member_not_guest,
     require_club_manager,
 )
+from app.core.timezone import serialize_to_kst
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ async def list_members(
             gender=m.gender.value,
             role=m.role.value,
             status=m.status.value,
-            created_at=m.created_at.isoformat(),
+            created_at=serialize_to_kst(m.created_at),
         ) for m in members]
     except HTTPException:
         raise

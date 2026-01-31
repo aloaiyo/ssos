@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from app.models.user import User
 from app.core.dependencies import get_current_active_user
 from app.models.member import ClubMember, MemberStatus
+from app.core.timezone import serialize_to_kst
 
 router = APIRouter(prefix="/users", tags=["사용자"])
 
@@ -25,5 +26,5 @@ async def get_my_clubs(current_user: User = Depends(get_current_active_user)):
         "description": m.club.description,
         "my_role": m.role.value,
         "member_count": await ClubMember.filter(club=m.club, status=MemberStatus.ACTIVE, is_deleted=False).count(),
-        "created_at": m.club.created_at.isoformat(),
+        "created_at": serialize_to_kst(m.club.created_at),
     } for m in memberships if not m.club.is_deleted]

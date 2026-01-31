@@ -1,10 +1,11 @@
 """
 경기 스키마
 """
-from pydantic import BaseModel
-from datetime import datetime, time
+from pydantic import BaseModel, ConfigDict
+from datetime import time
 from app.models.match import MatchType, MatchStatus, Team
 from typing import Optional, List, Dict, Any
+from app.core.timezone import KSTDatetime, OptionalKSTDatetime
 
 
 class MatchBase(BaseModel):
@@ -29,15 +30,14 @@ class MatchUpdate(BaseModel):
 
 class MatchResponse(MatchBase):
     """경기 응답 스키마"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     session_id: int
     status: MatchStatus
-    actual_start_time: Optional[datetime] = None
-    actual_end_time: Optional[datetime] = None
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
+    actual_start_time: OptionalKSTDatetime = None
+    actual_end_time: OptionalKSTDatetime = None
+    created_at: KSTDatetime
 
 
 class MatchParticipantCreate(BaseModel):
@@ -50,14 +50,13 @@ class MatchParticipantCreate(BaseModel):
 
 class MatchParticipantResponse(BaseModel):
     """경기 참가자 응답 스키마"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     match_id: int
     club_member_id: int
     team: Team
     position: int
-
-    class Config:
-        from_attributes = True
 
 
 class MatchResultBase(BaseModel):
@@ -75,10 +74,9 @@ class MatchResultCreate(MatchResultBase):
 
 class MatchResultResponse(MatchResultBase):
     """경기 결과 응답 스키마"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     match_id: int
     recorded_by_id: Optional[int] = None
-    recorded_at: datetime
-
-    class Config:
-        from_attributes = True
+    recorded_at: KSTDatetime

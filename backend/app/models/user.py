@@ -60,8 +60,8 @@ class User(BaseModel):
             return False
         if self.subscription_expires_at is None:
             return False
-        from datetime import datetime
-        return self.subscription_expires_at > datetime.utcnow()
+        from app.core.timezone import utc_now
+        return self.subscription_expires_at > utc_now()
 
     @property
     def max_manager_clubs(self) -> int:

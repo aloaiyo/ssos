@@ -2,9 +2,10 @@
 일정 및 세션 스키마
 """
 from pydantic import BaseModel, ConfigDict
-from datetime import datetime, date, time
+from datetime import date, time
 from app.models.event import EventType, SessionStatus, SessionType, ParticipationType
 from typing import Optional, List
+from app.core.timezone import KSTDatetime, OptionalKSTDatetime
 
 
 class EventBase(BaseModel):
@@ -28,12 +29,11 @@ class EventUpdate(BaseModel):
 
 class EventResponse(EventBase):
     """일정 응답 스키마"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     club_id: int
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
+    created_at: KSTDatetime
 
 
 class SessionConfigBase(BaseModel):
@@ -51,12 +51,11 @@ class SessionConfigCreate(SessionConfigBase):
 
 class SessionConfigResponse(SessionConfigBase):
     """세션 설정 응답 스키마"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     club_id: int
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
+    created_at: KSTDatetime
 
 
 class SessionBase(BaseModel):
@@ -102,7 +101,7 @@ class SessionResponse(SessionBase):
     season_id: Optional[int] = None
     config_id: Optional[int] = None
     status: SessionStatus
-    created_at: datetime
+    created_at: KSTDatetime
 
 
 class SessionWithDetailsResponse(SessionResponse):
@@ -121,11 +120,10 @@ class SessionParticipantCreate(BaseModel):
 
 class SessionParticipantResponse(BaseModel):
     """세션 참가자 응답 스키마"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     session_id: int
     club_member_id: int
     participation_type: ParticipationType
-    arrived_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
+    arrived_at: OptionalKSTDatetime = None

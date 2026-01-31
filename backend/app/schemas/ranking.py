@@ -1,8 +1,8 @@
 """
 랭킹 스키마
 """
-from pydantic import BaseModel
-from datetime import datetime
+from pydantic import BaseModel, ConfigDict
+from app.core.timezone import KSTDatetime
 
 
 class RankingBase(BaseModel):
@@ -16,14 +16,13 @@ class RankingBase(BaseModel):
 
 class RankingResponse(RankingBase):
     """랭킹 응답 스키마"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     club_id: int
     club_member_id: int
-    last_updated: datetime
+    last_updated: KSTDatetime
     win_rate: float
-
-    class Config:
-        from_attributes = True
 
 
 class RankingDetailResponse(RankingResponse):

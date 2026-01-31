@@ -18,6 +18,7 @@ from app.core.dependencies import (
     require_club_manager,
     get_club_or_404
 )
+from app.core.timezone import serialize_to_kst
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/clubs/{club_id}/seasons", tags=["시즌 관리"])
@@ -95,7 +96,7 @@ async def list_seasons(
             "status": season.status.value,
             "session_count": session_counts.get(season.id, 0),
             "match_count": match_counts.get(season.id, 0),
-            "created_at": season.created_at.isoformat(),
+            "created_at": serialize_to_kst(season.created_at),
         })
 
     return result
@@ -140,7 +141,7 @@ async def create_season(
         "start_date": season.start_date.isoformat(),
         "end_date": season.end_date.isoformat(),
         "status": season.status.value,
-        "created_at": season.created_at.isoformat(),
+        "created_at": serialize_to_kst(season.created_at),
     }
 
 
@@ -209,7 +210,7 @@ async def get_season(
         "session_count": len(sessions),
         "match_count": total_match_count,
         "sessions": session_list,
-        "created_at": season.created_at.isoformat(),
+        "created_at": serialize_to_kst(season.created_at),
     }
 
 
@@ -256,7 +257,7 @@ async def update_season(
         "start_date": season.start_date.isoformat(),
         "end_date": season.end_date.isoformat(),
         "status": season.status.value,
-        "created_at": season.created_at.isoformat(),
+        "created_at": serialize_to_kst(season.created_at),
     }
 
 

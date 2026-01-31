@@ -2,9 +2,10 @@
 시즌 스키마
 """
 from pydantic import BaseModel, ConfigDict
-from datetime import datetime, date
+from datetime import date
 from app.models.season import SeasonStatus
 from typing import Optional, List
+from app.core.timezone import KSTDatetime
 
 
 class SeasonBase(BaseModel):
@@ -36,7 +37,7 @@ class SeasonResponse(SeasonBase):
     id: int
     club_id: int
     status: SeasonStatus
-    created_at: datetime
+    created_at: KSTDatetime
 
 
 class SeasonWithStatsResponse(SeasonResponse):
@@ -65,7 +66,7 @@ class SeasonRankingResponse(SeasonRankingBase):
     club_member_id: int
     rank: Optional[int] = None
     win_rate: float = 0.0
-    last_updated: datetime
+    last_updated: KSTDatetime
 
     # 추가 정보 (조인 결과)
     member_name: Optional[str] = None

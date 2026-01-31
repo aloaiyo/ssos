@@ -2,9 +2,10 @@
 동호회 스키마
 """
 from pydantic import BaseModel, ConfigDict
-from datetime import datetime, time
+from datetime import time
 from typing import Optional, List
 from app.schemas.schedule import ScheduleCreate, ScheduleResponse
+from app.core.timezone import KSTDatetime
 
 
 class ClubBase(BaseModel):
@@ -45,8 +46,8 @@ class ClubResponse(ClubBase):
     """동호회 응답 스키마"""
     id: int
     created_by_id: int
-    created_at: datetime
-    modified_at: datetime
+    created_at: KSTDatetime
+    modified_at: KSTDatetime
     is_deleted: bool
     # 기본 정보
     default_num_courts: Optional[int] = None
@@ -64,7 +65,7 @@ class ClubResponse(ClubBase):
 class ClubSearchResponse(ClubBase):
     """동호회 검색 응답 스키마 (회원수, 가입상태 포함)"""
     id: int
-    created_at: datetime
+    created_at: KSTDatetime
     location: Optional[str] = None
     # 가입 설정
     is_join_allowed: bool = True

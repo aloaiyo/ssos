@@ -3,10 +3,10 @@
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional
-from pydantic import BaseModel
-from datetime import datetime
+from pydantic import BaseModel, ConfigDict
 
 from app.models.user import User
+from app.core.timezone import utc_now, KSTDatetime, OptionalKSTDatetime
 from app.models.member import ClubMember, MemberRole, MemberStatus
 from app.models.fee import FeeSetting, FeePayment, FeeType, PaymentStatus
 from app.core.dependencies import get_current_active_user
@@ -33,6 +33,8 @@ class FeeSettingUpdate(BaseModel):
 
 
 class FeeSettingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     fee_type: str
@@ -40,10 +42,7 @@ class FeeSettingResponse(BaseModel):
     description: Optional[str]
     due_day: int
     is_active: bool
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
+    created_at: KSTDatetime
 
 
 class PaymentCreate(BaseModel):
@@ -61,6 +60,8 @@ class PaymentUpdate(BaseModel):
 
 
 class PaymentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     fee_setting_id: int
     fee_setting_name: str
@@ -71,12 +72,9 @@ class PaymentResponse(BaseModel):
     amount_due: int
     amount_paid: int
     status: str
-    paid_at: Optional[datetime]
+    paid_at: OptionalKSTDatetime
     note: Optional[str]
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
+    created_at: KSTDatetime
 
 
 class PaymentSummary(BaseModel):
@@ -362,7 +360,7 @@ async def update_payment(
         # 자동 상태 업데이트
         if payment.amount_paid >= payment.amount_due:
             payment.status = PaymentStatus.PAID
-            payment.paid_at = datetime.utcnow()
+            payment.paid_at = utc_now()
         elif payment.amount_paid > 0:
             payment.status = PaymentStatus.PARTIAL
         else:
@@ -371,7 +369,7 @@ async def update_payment(
     if data.status is not None:
         payment.status = PaymentStatus(data.status)
         if payment.status == PaymentStatus.PAID and not payment.paid_at:
-            payment.paid_at = datetime.utcnow()
+            payment.paid_at = utc_now()
 
     if data.note is not None:
         payment.note = data.note

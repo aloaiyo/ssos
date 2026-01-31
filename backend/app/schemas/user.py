@@ -3,9 +3,10 @@
 """
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from pydantic import ConfigDict
-from datetime import datetime, date
+from datetime import date
 from typing import Optional
 import re
+from app.core.timezone import KSTDatetime, OptionalKSTDatetime
 
 
 class UserBase(BaseModel):
@@ -66,7 +67,7 @@ class UserResponse(BaseModel):
     is_premium: bool
     gender: Optional[str] = None
     birth_date: Optional[date] = None
-    created_at: datetime
+    created_at: KSTDatetime
 
 
 class UserProfileResponse(BaseModel):
@@ -118,5 +119,5 @@ class SubscriptionResponse(BaseModel):
 
     subscription_tier: str
     is_premium: bool
-    subscription_expires_at: Optional[datetime] = None
+    subscription_expires_at: OptionalKSTDatetime = None
     max_manager_clubs: int
