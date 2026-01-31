@@ -1,10 +1,15 @@
 """
 세션 관리 API
+
+시간 처리:
+- 클라이언트에서 date + start_time + end_time을 KST 기준으로 전송
+- 서버에서 UTC datetime으로 변환하여 저장
+- 응답 시 UTC → KST 변환하여 반환
 """
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional
-from datetime import date, time
+from datetime import date, time, datetime, timedelta
 from pydantic import BaseModel as PydanticBase, Field
 from app.models.club import Club
 from app.models.event import Event, Session, SessionParticipant, SessionStatus, SessionType, EventType, ParticipantCategory, ParticipationType
@@ -18,13 +23,21 @@ from app.core.dependencies import (
     require_club_manager,
     get_club_or_404
 )
+from app.core.timezone import KST, to_utc, to_kst
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/clubs/{club_id}/sessions", tags=["세션 관리"])
 
 
 class SessionCreate(PydanticBase):
-    """세션 생성 요청"""
+    """
+    세션 생성 요청
+
+    시간 필드는 KST 기준으로 전송:
+    - date: 세션 날짜 (예: 2026-01-31)
+    - start_time: 시작 시간 (예: 09:00)
+    - end_time: 종료 시간 (예: 12:00)
+    """
     title: Optional[str] = Field(None, max_length=200)
     date: date
     start_time: time
@@ -34,6 +47,19 @@ class SessionCreate(PydanticBase):
     match_duration_minutes: int = Field(30, ge=10, le=120)
     session_type: str = Field("league", pattern="^(league|tournament)$")
     season_id: Optional[int] = None
+
+    def to_utc_datetimes(self) -> tuple[datetime, datetime]:
+        """date + time을 UTC datetime으로 변환"""
+        # KST datetime 생성
+        start_kst = datetime.combine(self.date, self.start_time, tzinfo=KST)
+        end_kst = datetime.combine(self.date, self.end_time, tzinfo=KST)
+
+        # 종료 시간이 시작 시간보다 이른 경우 (자정 넘김)
+        if self.end_time <= self.start_time:
+            end_kst = end_kst + timedelta(days=1)
+
+        # UTC로 변환
+        return to_utc(start_kst), to_utc(end_kst)
 
 
 class MatchParticipantData(PydanticBase):
@@ -159,9 +185,13 @@ async def list_sessions(
     return [{
         "id": s.id,
         "title": s.title,
+        # 하위 호환: date, start_time, end_time (KST 기준, 프로퍼티에서 변환)
         "date": s.date.isoformat(),
         "start_time": s.start_time.isoformat(),
         "end_time": s.end_time.isoformat(),
+        # 정확한 datetime (KST 변환)
+        "start_datetime": to_kst(s.start_datetime).isoformat(),
+        "end_datetime": to_kst(s.end_datetime).isoformat(),
         "location": s.location,
         "num_courts": s.num_courts,
         "session_type": s.session_type.value if s.session_type else "league",
@@ -201,13 +231,15 @@ async def create_session(
                 event_type=EventType.REGULAR
             )
 
+    # KST date+time → UTC datetime 변환
+    start_datetime_utc, end_datetime_utc = session_data.to_utc_datetimes()
+
     session = await Session.create(
         event=event,
         season=season,
         title=session_data.title,
-        date=session_data.date,
-        start_time=session_data.start_time,
-        end_time=session_data.end_time,
+        start_datetime=start_datetime_utc,
+        end_datetime=end_datetime_utc,
         location=session_data.location,
         num_courts=session_data.num_courts,
         match_duration_minutes=session_data.match_duration_minutes,
@@ -218,9 +250,13 @@ async def create_session(
     return {
         "id": session.id,
         "title": session.title,
+        # 하위 호환: date, start_time, end_time (KST 기준)
         "date": session.date.isoformat(),
         "start_time": session.start_time.isoformat(),
         "end_time": session.end_time.isoformat(),
+        # 정확한 datetime (KST 변환)
+        "start_datetime": to_kst(session.start_datetime).isoformat(),
+        "end_datetime": to_kst(session.end_datetime).isoformat(),
         "location": session.location,
         "num_courts": session.num_courts,
         "session_type": session.session_type.value,
@@ -286,9 +322,13 @@ async def get_session(
     return {
         "id": session.id,
         "title": session.title,
+        # 하위 호환: date, start_time, end_time (KST 기준)
         "date": session.date.isoformat(),
         "start_time": session.start_time.isoformat(),
         "end_time": session.end_time.isoformat(),
+        # 정확한 datetime (KST 변환)
+        "start_datetime": to_kst(session.start_datetime).isoformat(),
+        "end_datetime": to_kst(session.end_datetime).isoformat(),
         "location": session.location,
         "num_courts": session.num_courts,
         "session_type": session.session_type.value if session.session_type else "league",
@@ -601,7 +641,7 @@ async def create_match(
         session=session,
         match_number=match_count + 1,
         court_number=match_data.court_number,
-        scheduled_time=session.start_time,
+        scheduled_datetime=session.start_datetime,  # UTC datetime
         match_type=match_data.match_type,
         status=MatchStatus.SCHEDULED
     )
@@ -846,16 +886,16 @@ async def update_session(
 
     if session_data.title is not None:
         session.title = session_data.title
-    if session_data.date is not None:
-        session.date = session_data.date
-    if session_data.start_time is not None:
-        session.start_time = session_data.start_time
-    if session_data.end_time is not None:
-        session.end_time = session_data.end_time
     if session_data.location is not None:
         session.location = session_data.location
     if session_data.session_type is not None:
         session.session_type = SessionType(session_data.session_type)
+
+    # 날짜/시간이 변경된 경우 UTC datetime으로 변환
+    if session_data.date is not None or session_data.start_time is not None or session_data.end_time is not None:
+        start_datetime_utc, end_datetime_utc = session_data.to_utc_datetimes()
+        session.start_datetime = start_datetime_utc
+        session.end_datetime = end_datetime_utc
 
     await session.save()
 
@@ -863,6 +903,10 @@ async def update_session(
         "id": session.id,
         "title": session.title,
         "date": session.date.isoformat(),
+        "start_time": session.start_time.isoformat(),
+        "end_time": session.end_time.isoformat(),
+        "start_datetime": to_kst(session.start_datetime).isoformat(),
+        "end_datetime": to_kst(session.end_datetime).isoformat(),
         "location": session.location,
         "session_type": session.session_type.value if session.session_type else "league",
     }
@@ -924,7 +968,7 @@ async def generate_matches(
             session=session,
             match_number=match_number,
             court_number=(match_number - 1) % session.num_courts + 1,
-            scheduled_time=session.start_time,
+            scheduled_datetime=session.start_datetime,
             match_type=MatchType.MIXED_DOUBLES,
             status=MatchStatus.SCHEDULED
         )
@@ -953,7 +997,7 @@ async def generate_matches(
             session=session,
             match_number=match_number,
             court_number=(match_number - 1) % session.num_courts + 1,
-            scheduled_time=session.start_time,
+            scheduled_datetime=session.start_datetime,
             match_type=MatchType.MENS_DOUBLES,
             status=MatchStatus.SCHEDULED
         )
@@ -979,7 +1023,7 @@ async def generate_matches(
             session=session,
             match_number=match_number,
             court_number=(match_number - 1) % session.num_courts + 1,
-            scheduled_time=session.start_time,
+            scheduled_datetime=session.start_datetime,
             match_type=MatchType.WOMENS_DOUBLES,
             status=MatchStatus.SCHEDULED
         )
@@ -1076,10 +1120,10 @@ async def generate_ai_matches(
 
         participants_data.append(participant_info)
 
-    # 세션 설정
+    # 세션 설정 (KST 기준 시간으로 AI에 전달)
     session_config = {
-        "start_time": session.start_time.strftime("%H:%M"),
-        "end_time": session.end_time.strftime("%H:%M"),
+        "start_time": session.start_time.strftime("%H:%M"),  # KST 기준 (프로퍼티)
+        "end_time": session.end_time.strftime("%H:%M"),      # KST 기준 (프로퍼티)
         "match_duration": request.match_duration_minutes or session.match_duration_minutes or 30,
         "break_duration": request.break_duration_minutes if request.break_duration_minutes is not None else (session.break_duration_minutes or 5),
         "num_courts": session.num_courts
@@ -1146,20 +1190,22 @@ async def confirm_ai_matches(
         }
         match_type = match_type_map.get(match_data.get("match_type"), MatchType.MENS_DOUBLES)
 
-        # 예약 시간 파싱
+        # 예약 시간 파싱 (KST 시간 문자열 → UTC datetime)
         scheduled_time_str = match_data.get("scheduled_time", session.start_time.strftime("%H:%M"))
         try:
             hour, minute = map(int, scheduled_time_str.split(":"))
-            scheduled_time = time(hour, minute)
+            # 세션 날짜 + 예약 시간 → KST datetime → UTC datetime
+            scheduled_kst = datetime.combine(session.date, time(hour, minute), tzinfo=KST)
+            scheduled_datetime_utc = to_utc(scheduled_kst)
         except:
-            scheduled_time = session.start_time
+            scheduled_datetime_utc = session.start_datetime
 
         # 경기 생성
         match = await Match.create(
             session_id=session_id,
             match_number=match_data.get("match_number", len(matches_created) + 1),
             court_number=match_data.get("court_number", 1),
-            scheduled_time=scheduled_time,
+            scheduled_datetime=scheduled_datetime_utc,  # UTC datetime
             match_type=match_type,
             status=MatchStatus.SCHEDULED
         )

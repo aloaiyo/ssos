@@ -1,39 +1,46 @@
 """
 경기 스키마
+
+시간 처리 규칙:
+- scheduled_datetime: 경기 예정 시간 (UTC 저장, KST 응답)
+- scheduled_time: 하위 호환용 (KST 기준 시간만)
 """
 from pydantic import BaseModel, ConfigDict
-from datetime import time
+from datetime import time, datetime
 from app.models.match import MatchType, MatchStatus, Team
 from typing import Optional, List, Dict, Any
 from app.core.timezone import KSTDatetime, OptionalKSTDatetime
 
 
-class MatchBase(BaseModel):
-    """경기 기본 스키마"""
+class MatchCreate(BaseModel):
+    """경기 생성 스키마 (내부 API용, 세션에서 생성 시 사용)"""
+    session_id: int
     match_number: int
     court_number: int
-    scheduled_time: time
+    scheduled_datetime: datetime  # UTC datetime
     match_type: MatchType
-
-
-class MatchCreate(MatchBase):
-    """경기 생성 스키마"""
-    session_id: int
 
 
 class MatchUpdate(BaseModel):
     """경기 수정 스키마"""
     court_number: Optional[int] = None
-    scheduled_time: Optional[time] = None
+    scheduled_datetime: Optional[datetime] = None  # UTC datetime
     status: Optional[MatchStatus] = None
 
 
-class MatchResponse(MatchBase):
+class MatchResponse(BaseModel):
     """경기 응답 스키마"""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     session_id: int
+    match_number: int
+    court_number: int
+    # UTC datetime (응답 시 KST로 변환)
+    scheduled_datetime: KSTDatetime
+    # 하위 호환용 (프로퍼티에서 자동 계산)
+    scheduled_time: time
+    match_type: MatchType
     status: MatchStatus
     actual_start_time: OptionalKSTDatetime = None
     actual_end_time: OptionalKSTDatetime = None

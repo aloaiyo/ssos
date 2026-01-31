@@ -154,4 +154,7 @@ TORTOISE_ORM = {
             "default_connection": "default",
         },
     },
+    # 타임존 설정: 모든 datetime을 UTC로 저장
+    "use_tz": True,
+    "timezone": "UTC",
 }

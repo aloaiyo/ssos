@@ -1,12 +1,17 @@
 """
 매칭 알고리즘 서비스
+
+시간 처리:
+- 모든 시간은 UTC datetime으로 처리
+- start_datetime: 세션 시작 시간 (UTC)
+- 경기 시간은 start_datetime + (match_index * duration)으로 계산
 """
 from typing import List, Dict, Any
+from datetime import datetime, timedelta
 from app.models.event import SessionParticipant
 from app.models.match import Match, MatchParticipant, MatchType, Team
 from app.models.member import Gender
 import random
-from datetime import time, timedelta
 
 
 async def create_matches_for_session(
@@ -14,7 +19,7 @@ async def create_matches_for_session(
     participants: List[SessionParticipant],
     num_courts: int,
     match_duration_minutes: int,
-    start_time: time
+    start_datetime: datetime  # UTC datetime
 ) -> List[Match]:
     """
     세션에 대한 매치 생성
@@ -46,7 +51,7 @@ async def create_matches_for_session(
             match_type=MatchType.MENS_DOUBLES,
             num_courts=num_courts,
             match_duration_minutes=match_duration_minutes,
-            start_time=start_time,
+            start_datetime=start_datetime,
             match_number_start=match_number
         )
         matches.extend(mens_matches)
@@ -59,7 +64,7 @@ async def create_matches_for_session(
             participants=mixed_doubles_participants,
             num_courts=num_courts,
             match_duration_minutes=match_duration_minutes,
-            start_time=start_time,
+            start_datetime=start_datetime,
             match_number_start=match_number
         )
         matches.extend(mixed_matches)
@@ -72,7 +77,7 @@ async def create_matches_for_session(
             participants=singles_participants,
             num_courts=num_courts,
             match_duration_minutes=match_duration_minutes,
-            start_time=start_time,
+            start_datetime=start_datetime,
             match_number_start=match_number
         )
         matches.extend(singles_matches)
@@ -86,7 +91,7 @@ async def _create_doubles_matches(
     match_type: MatchType,
     num_courts: int,
     match_duration_minutes: int,
-    start_time: time,
+    start_datetime: datetime,  # UTC datetime
     match_number_start: int
 ) -> List[Match]:
     """복식 매치 생성"""
@@ -95,7 +100,8 @@ async def _create_doubles_matches(
 
     court = 1
     match_number = match_number_start
-    current_time = start_time
+    current_datetime = start_datetime
+    time_slot = 0
 
     # 4명씩 묶어서 매치 생성
     for i in range(0, len(participants) - 3, 4):
@@ -106,7 +112,7 @@ async def _create_doubles_matches(
             session_id=session_id,
             match_number=match_number,
             court_number=court,
-            scheduled_time=current_time,
+            scheduled_datetime=current_datetime,  # UTC datetime
             match_type=match_type
         )
 
@@ -136,7 +142,8 @@ async def _create_doubles_matches(
         if court > num_courts:
             court = 1
             # 다음 시간대로 이동
-            current_time = _add_minutes(current_time, match_duration_minutes)
+            time_slot += 1
+            current_datetime = start_datetime + timedelta(minutes=match_duration_minutes * time_slot)
 
     return matches
 
@@ -146,7 +153,7 @@ async def _create_mixed_doubles_matches(
     participants: List[SessionParticipant],
     num_courts: int,
     match_duration_minutes: int,
-    start_time: time,
+    start_datetime: datetime,  # UTC datetime
     match_number_start: int
 ) -> List[Match]:
     """혼합 복식 매치 생성 (남녀 페어링 고려)"""
@@ -167,7 +174,8 @@ async def _create_mixed_doubles_matches(
     matches = []
     court = 1
     match_number = match_number_start
-    current_time = start_time
+    current_datetime = start_datetime
+    time_slot = 0
 
     # 남녀 2명씩 팀 구성
     min_pairs = min(len(male_participants), len(female_participants))
@@ -179,7 +187,7 @@ async def _create_mixed_doubles_matches(
             session_id=session_id,
             match_number=match_number,
             court_number=court,
-            scheduled_time=current_time,
+            scheduled_datetime=current_datetime,  # UTC datetime
             match_type=MatchType.MIXED_DOUBLES
         )
 
@@ -217,7 +225,8 @@ async def _create_mixed_doubles_matches(
         court += 1
         if court > num_courts:
             court = 1
-            current_time = _add_minutes(current_time, match_duration_minutes)
+            time_slot += 1
+            current_datetime = start_datetime + timedelta(minutes=match_duration_minutes * time_slot)
 
     return matches
 
@@ -227,7 +236,7 @@ async def _create_singles_matches(
     participants: List[SessionParticipant],
     num_courts: int,
     match_duration_minutes: int,
-    start_time: time,
+    start_datetime: datetime,  # UTC datetime
     match_number_start: int
 ) -> List[Match]:
     """단식 매치 생성"""
@@ -236,7 +245,8 @@ async def _create_singles_matches(
 
     court = 1
     match_number = match_number_start
-    current_time = start_time
+    current_datetime = start_datetime
+    time_slot = 0
 
     # 2명씩 묶어서 매치 생성
     for i in range(0, len(participants) - 1, 2):
@@ -244,7 +254,7 @@ async def _create_singles_matches(
             session_id=session_id,
             match_number=match_number,
             court_number=court,
-            scheduled_time=current_time,
+            scheduled_datetime=current_datetime,  # UTC datetime
             match_type=MatchType.SINGLES
         )
 
@@ -270,14 +280,24 @@ async def _create_singles_matches(
         court += 1
         if court > num_courts:
             court = 1
-            current_time = _add_minutes(current_time, match_duration_minutes)
+            time_slot += 1
+            current_datetime = start_datetime + timedelta(minutes=match_duration_minutes * time_slot)
 
     return matches
 
 
-def _add_minutes(original_time: time, minutes: int) -> time:
-    """시간에 분 추가"""
-    from datetime import datetime, timedelta
-    dt = datetime.combine(datetime.today(), original_time)
-    dt += timedelta(minutes=minutes)
-    return dt.time()
+def _add_minutes(original_time, minutes: int):
+    """
+    시간에 분 추가 (하위 호환용)
+
+    주의: 이 함수는 레거시 코드 지원용입니다.
+    새 코드에서는 datetime + timedelta를 사용하세요.
+    """
+    from datetime import datetime as dt, time
+    if isinstance(original_time, time):
+        base_dt = dt.combine(dt.today(), original_time)
+        result_dt = base_dt + timedelta(minutes=minutes)
+        return result_dt.time()
+    else:
+        # datetime인 경우
+        return original_time + timedelta(minutes=minutes)

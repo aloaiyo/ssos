@@ -28,7 +28,14 @@ class Team(str, Enum):
 
 
 class Match(BaseModel):
-    """경기 모델"""
+    """
+    경기 모델
+
+    시간 저장 방식:
+    - scheduled_datetime: 예정 시작 시간 (UTC)
+    - actual_start_time, actual_end_time: 실제 시작/종료 시간 (UTC)
+    - scheduled_time 프로퍼티: KST 기준 시간만 반환 (하위 호환)
+    """
 
     id = fields.IntField(pk=True)
     session = fields.ForeignKeyField(
@@ -38,7 +45,7 @@ class Match(BaseModel):
     )
     match_number = fields.IntField()
     court_number = fields.IntField()
-    scheduled_time = fields.TimeField()
+    scheduled_datetime = fields.DatetimeField()  # 예정 시작 시간 (UTC)
     match_type = fields.CharEnumField(MatchType)
     status = fields.CharEnumField(MatchStatus, default=MatchStatus.SCHEDULED)
     actual_start_time = fields.DatetimeField(null=True)
@@ -55,6 +62,12 @@ class Match(BaseModel):
 
     def __str__(self) -> str:
         return f"Match #{self.match_number} - Court {self.court_number}"
+
+    @property
+    def scheduled_time(self):
+        """경기 예정 시간 (KST 기준, 하위 호환용)"""
+        from app.core.timezone import to_kst
+        return to_kst(self.scheduled_datetime).time()
 
 
 class ParticipantCategory(str, Enum):

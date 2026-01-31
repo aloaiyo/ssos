@@ -91,7 +91,13 @@ class SessionConfig(BaseModel):
 
 
 class Session(BaseModel):
-    """세션 모델"""
+    """
+    세션 모델
+
+    시간 저장 방식:
+    - start_datetime, end_datetime: UTC로 저장 (타임존 명확)
+    - date, start_time, end_time 프로퍼티: KST 기준으로 반환 (하위 호환)
+    """
 
     id = fields.IntField(pk=True)
     event = fields.ForeignKeyField(
@@ -113,9 +119,11 @@ class Session(BaseModel):
         null=True
     )
     title = fields.CharField(max_length=200, null=True)  # 세션 제목
-    date = fields.DateField()
-    start_time = fields.TimeField()
-    end_time = fields.TimeField()
+
+    # 시간: UTC로 저장 (타임존 명확)
+    start_datetime = fields.DatetimeField()  # 세션 시작 시간 (UTC)
+    end_datetime = fields.DatetimeField()    # 세션 종료 시간 (UTC)
+
     location = fields.CharField(max_length=300, null=True)  # 장소
     num_courts = fields.IntField()
     match_duration_minutes = fields.IntField()
@@ -123,6 +131,24 @@ class Session(BaseModel):
     session_type = fields.CharEnumField(SessionType, default=SessionType.LEAGUE)  # 리그/토너먼트
     status = fields.CharEnumField(SessionStatus, default=SessionStatus.DRAFT)
     created_at = fields.DatetimeField(auto_now_add=True)
+
+    @property
+    def date(self):
+        """세션 날짜 (KST 기준)"""
+        from app.core.timezone import to_kst
+        return to_kst(self.start_datetime).date()
+
+    @property
+    def start_time(self):
+        """세션 시작 시간 (KST 기준)"""
+        from app.core.timezone import to_kst
+        return to_kst(self.start_datetime).time()
+
+    @property
+    def end_time(self):
+        """세션 종료 시간 (KST 기준)"""
+        from app.core.timezone import to_kst
+        return to_kst(self.end_datetime).time()
 
     # 관계
     participants: fields.ReverseRelation["SessionParticipant"]

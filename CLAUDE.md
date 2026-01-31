@@ -270,7 +270,11 @@ function formatContent(content) {
 ## Common Gotchas
 
 - **Aerich**: Run `migrate` before `upgrade` after model changes
-- **Aerich Migration Naming**: 파일명은 `0000_`, `0001_`, `0002_` 형식으로 4자리 숫자 prefix 사용 (예: `0003_20260111_add_feature.py`)
+- **Aerich Migration Naming**: 파일명은 반드시 **4자리 숫자 prefix** 사용
+  - 형식: `NNNN_YYYYMMDDHHMMSS_description.py` (예: `0005_20260131194857_datetime_timezone_refactor.py`)
+  - ❌ 잘못된 예: `5_20260131_...` (prefix가 4자리가 아님)
+  - ✅ 올바른 예: `0005_20260131_...` (4자리 prefix)
+  - Aerich가 자동 생성 시 prefix가 누락될 수 있으니 생성 후 확인 필요
 - **Tortoise**: ALL db operations need `await`, even `.count()`, `.exists()`
 - **Pydantic V2**: Use `model_config = ConfigDict(from_attributes=True)`
 - **Cookies**: Frontend must use `withCredentials: true` for Axios; Backend CORS must allow credentials
