@@ -1,26 +1,37 @@
 """
 Gemini API를 사용한 경기 결과지 OCR 서비스
+
+google-genai SDK 사용 (pip install google-genai)
+https://ai.google.dev/gemini-api/docs
 """
-import base64
 import json
 import logging
 from typing import Dict, Any
-from google import genai
-from google.genai import types
-from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Lazy import to avoid import errors when API key is not set
+_client = None
+
+
+def _get_client():
+    """Lazy initialization of Gemini client"""
+    global _client
+    if _client is None:
+        from app.config import settings
+        if not settings.GEMINI_API_KEY:
+            raise ValueError("GEMINI_API_KEY가 설정되지 않았습니다")
+
+        from google import genai
+        _client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    return _client
 
 
 class OCRService:
     """경기 결과지 이미지에서 데이터를 추출하는 서비스"""
 
     def __init__(self):
-        self.client = None
-        if settings.GEMINI_API_KEY:
-            self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        else:
-            logger.warning("GEMINI_API_KEY가 설정되지 않았습니다")
+        pass  # Lazy initialization - client created on first use
 
     async def extract_match_results(self, image_data: bytes, mime_type: str = "image/jpeg") -> Dict[str, Any]:
         """
@@ -33,8 +44,9 @@ class OCRService:
         Returns:
             추출된 경기 결과 데이터
         """
-        if not self.client:
-            raise ValueError("Gemini API가 설정되지 않았습니다. GEMINI_API_KEY를 확인하세요.")
+        from google.genai import types
+
+        client = _get_client()
 
         prompt = """
 이 이미지는 테니스/배드민턴 경기 결과지입니다. 이미지에서 경기 결과 정보를 추출해주세요.
@@ -70,25 +82,15 @@ class OCRService:
 JSON만 반환하고 다른 텍스트는 포함하지 마세요.
 """
 
+        result_text = ""
         try:
-            # 이미지를 base64로 인코딩
-            image_base64 = base64.b64encode(image_data).decode('utf-8')
-
-            # 새로운 SDK 형식으로 요청 (가장 저렴한 모델 사용)
-            response = self.client.models.generate_content(
-                model='gemini-2.0-flash-lite',
+            # google-genai SDK 사용 (최신 API 문서 기반)
+            # https://ai.google.dev/gemini-api/docs/image-understanding
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',  # 이미지 처리 지원, 저렴한 모델
                 contents=[
-                    types.Content(
-                        parts=[
-                            types.Part(
-                                inline_data=types.Blob(
-                                    mime_type=mime_type,
-                                    data=image_data
-                                )
-                            ),
-                            types.Part(text=prompt)
-                        ]
-                    )
+                    types.Part.from_bytes(data=image_data, mime_type=mime_type),
+                    prompt
                 ]
             )
 
