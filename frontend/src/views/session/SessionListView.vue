@@ -7,6 +7,15 @@
         <v-btn color="primary" variant="flat" @click="goToToday">
           오늘
         </v-btn>
+        <v-btn
+          v-if="isManager"
+          color="primary"
+          variant="flat"
+          prepend-icon="mdi-plus"
+          @click="openCreateDialog"
+        >
+          세션 추가
+        </v-btn>
       </div>
     </div>
 
@@ -104,8 +113,123 @@
       <v-card-text v-else class="text-center py-8">
         <v-icon size="48" color="grey-lighten-1">mdi-calendar-blank</v-icon>
         <p class="text-grey mt-2">이 날짜에 일정이 없습니다</p>
+        <v-btn
+          v-if="isManager"
+          color="primary"
+          variant="tonal"
+          class="mt-4"
+          prepend-icon="mdi-plus"
+          @click="openCreateDialogForDate(selectedDay.date)"
+        >
+          세션 추가
+        </v-btn>
       </v-card-text>
     </v-card>
+
+    <!-- 세션 생성 다이얼로그 -->
+    <v-dialog v-model="showCreateDialog" max-width="500" persistent>
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon class="mr-2">mdi-calendar-plus</v-icon>
+          새 세션 만들기
+        </v-card-title>
+        <v-card-text>
+          <v-form ref="createForm" v-model="formValid">
+            <v-row>
+              <v-col cols="12">
+                <v-text-field
+                  v-model="sessionForm.date"
+                  label="날짜"
+                  type="date"
+                  variant="outlined"
+                  density="compact"
+                  :rules="[v => !!v || '날짜를 선택하세요']"
+                  required
+                />
+              </v-col>
+              <v-col cols="6">
+                <v-text-field
+                  v-model="sessionForm.start_time"
+                  label="시작 시간"
+                  type="time"
+                  variant="outlined"
+                  density="compact"
+                  :rules="[v => !!v || '시작 시간을 입력하세요']"
+                  required
+                />
+              </v-col>
+              <v-col cols="6">
+                <v-text-field
+                  v-model="sessionForm.end_time"
+                  label="종료 시간"
+                  type="time"
+                  variant="outlined"
+                  density="compact"
+                  :rules="[v => !!v || '종료 시간을 입력하세요']"
+                  required
+                />
+              </v-col>
+              <v-col cols="12">
+                <v-text-field
+                  v-model="sessionForm.location"
+                  label="장소"
+                  variant="outlined"
+                  density="compact"
+                  placeholder="예: OO 테니스장"
+                />
+              </v-col>
+              <v-col cols="6">
+                <v-text-field
+                  v-model.number="sessionForm.num_courts"
+                  label="코트 수"
+                  type="number"
+                  variant="outlined"
+                  density="compact"
+                  min="1"
+                  max="20"
+                  :rules="[v => v >= 1 || '1개 이상 필요']"
+                  required
+                />
+              </v-col>
+              <v-col cols="6">
+                <v-text-field
+                  v-model.number="sessionForm.match_duration_minutes"
+                  label="경기 시간 (분)"
+                  type="number"
+                  variant="outlined"
+                  density="compact"
+                  min="10"
+                  max="120"
+                />
+              </v-col>
+              <v-col cols="12">
+                <v-textarea
+                  v-model="sessionForm.notes"
+                  label="메모"
+                  variant="outlined"
+                  density="compact"
+                  rows="2"
+                  placeholder="추가 안내사항"
+                />
+              </v-col>
+            </v-row>
+          </v-form>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="closeCreateDialog">취소</v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            :loading="isSaving"
+            :disabled="!formValid"
+            @click="createSession"
+          >
+            생성
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- 로딩 -->
     <v-overlay v-model="isLoading" class="align-center justify-center" contained>
@@ -124,11 +248,27 @@ const router = useRouter()
 
 const clubStore = useClubStore()
 const selectedClub = computed(() => clubStore.selectedClub)
+const isManager = computed(() => clubStore.isManagerOfSelectedClub)
 
 const isLoading = ref(false)
+const isSaving = ref(false)
 const sessions = ref([])
 const currentDate = ref(new Date())
 const selectedDay = ref(null)
+
+// 세션 생성 폼
+const showCreateDialog = ref(false)
+const createForm = ref(null)
+const formValid = ref(false)
+const sessionForm = ref({
+  date: '',
+  start_time: '09:00',
+  end_time: '12:00',
+  location: '',
+  num_courts: 4,
+  match_duration_minutes: 30,
+  notes: ''
+})
 
 const weekdays = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -264,6 +404,67 @@ async function loadSessions() {
   }
 }
 
+// 세션 생성 관련 함수들
+function formatDateForInput(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function openCreateDialog() {
+  // 기본 날짜: 오늘
+  sessionForm.value.date = formatDateForInput(new Date())
+  showCreateDialog.value = true
+}
+
+function openCreateDialogForDate(date) {
+  sessionForm.value.date = formatDateForInput(date)
+  showCreateDialog.value = true
+}
+
+function closeCreateDialog() {
+  showCreateDialog.value = false
+  sessionForm.value = {
+    date: '',
+    start_time: '09:00',
+    end_time: '12:00',
+    location: '',
+    num_courts: 4,
+    match_duration_minutes: 30,
+    notes: ''
+  }
+}
+
+async function createSession() {
+  if (!selectedClub.value?.id || !formValid.value) return
+
+  isSaving.value = true
+  try {
+    await apiClient.post(`/clubs/${selectedClub.value.id}/sessions`, {
+      date: sessionForm.value.date,
+      start_time: sessionForm.value.start_time,
+      end_time: sessionForm.value.end_time,
+      location: sessionForm.value.location || null,
+      num_courts: sessionForm.value.num_courts,
+      match_duration_minutes: sessionForm.value.match_duration_minutes,
+      notes: sessionForm.value.notes || null
+    })
+    closeCreateDialog()
+    await loadSessions()
+    // 생성한 날짜 선택
+    const createdDate = new Date(sessionForm.value.date)
+    selectedDay.value = calendarDays.value.find(d =>
+      d.date.toDateString() === createdDate.toDateString()
+    )
+  } catch (error) {
+    console.error('세션 생성 실패:', error)
+    alert(error.response?.data?.detail || '세션 생성에 실패했습니다.')
+  } finally {
+    isSaving.value = false
+  }
+}
+
 watch(selectedClub, () => {
   loadSessions()
 })
@@ -291,6 +492,11 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .page-title {
