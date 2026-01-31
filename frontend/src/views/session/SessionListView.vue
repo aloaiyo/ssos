@@ -330,7 +330,11 @@ function getSessionsForDate(date) {
 }
 
 function formatDateToISO(date) {
-  return date.toISOString().split('T')[0]
+  // toISOString()은 UTC로 변환되어 날짜가 밀릴 수 있으므로 로컬 날짜 사용
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function formatSelectedDate(date) {
