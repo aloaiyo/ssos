@@ -11,6 +11,8 @@ class MemberRole(str, Enum):
     MANAGER = "manager"  # 클럽 관리자
     MEMBER = "member"    # 일반 회원
     GUEST = "guest"      # 게스트 (제한된 권한)
+    FRIEND = "friend"    # 지인 (전 회원 등, 권한은 게스트와 동일)
+    ALUMNI = "alumni"    # 졸업자 (권한은 게스트와 동일)
 
 
 class MemberStatus(str, Enum):

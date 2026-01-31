@@ -5,6 +5,10 @@
 - 매니저(MANAGER): 모든 권한, 회원/게스트 관리
 - 일반 회원(MEMBER): 일정, 경기, 회원 목록 조회
 - 게스트(GUEST): 일정과 본인 경기만 조회 (회원 목록 조회 불가)
+- 지인(FRIEND): 게스트와 동일한 권한 (전 회원 등 잘 아는 사람)
+- 졸업자(ALUMNI): 게스트와 동일한 권한
+
+Note: GUEST, FRIEND, ALUMNI는 동일한 제한된 권한 (exclude_guest로 제외됨)
 """
 from fastapi import Depends, HTTPException, status, Request
 from app.models.user import User
@@ -166,12 +170,12 @@ class ClubPermission:
                     detail="클럽 관리자 권한이 필요합니다"
                 )
 
-        # 게스트 제외 확인
+        # 게스트/지인/졸업자 제외 확인 (제한된 권한 역할)
         if self.exclude_guest:
-            if membership.role == MemberRole.GUEST:
+            if membership.role in (MemberRole.GUEST, MemberRole.FRIEND, MemberRole.ALUMNI):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="게스트는 이 기능에 접근할 수 없습니다"
+                    detail="이 기능에 접근할 수 없습니다"
                 )
 
         return membership

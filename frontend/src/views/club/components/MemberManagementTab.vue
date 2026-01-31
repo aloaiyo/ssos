@@ -244,6 +244,8 @@ const roleOptions = [
   { title: '전체', value: 'all' },
   { title: '매니저', value: 'manager' },
   { title: '회원', value: 'member' },
+  { title: '지인', value: 'friend' },
+  { title: '졸업자', value: 'alumni' },
 ]
 
 const genderOptions = [
@@ -255,6 +257,8 @@ const genderOptions = [
 const availableRoles = [
   { title: '매니저', value: 'manager' },
   { title: '회원', value: 'member' },
+  { title: '지인', value: 'friend' },
+  { title: '졸업자', value: 'alumni' },
 ]
 
 const pendingMembers = computed(() =>
@@ -288,6 +292,8 @@ function getRoleColor(role) {
   const colors = {
     manager: 'primary',
     member: 'grey',
+    friend: 'teal',
+    alumni: 'purple',
   }
   return colors[role] || 'grey'
 }
@@ -296,6 +302,8 @@ function getRoleLabel(role) {
   const labels = {
     manager: '매니저',
     member: '회원',
+    friend: '지인',
+    alumni: '졸업자',
   }
   return labels[role] || role
 }
