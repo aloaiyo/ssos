@@ -22,7 +22,8 @@ class EventBase(BaseModel):
 
 class EventCreate(EventBase):
     """일정 생성 스키마"""
-    club_id: int
+    # club_id는 URL path에서 제공되므로 optional
+    club_id: Optional[int] = None
 
 
 class EventUpdate(BaseModel):

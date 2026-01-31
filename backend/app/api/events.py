@@ -7,12 +7,13 @@ from app.schemas.event import EventCreate, EventResponse, EventUpdate
 from app.models.event import Event
 from app.models.club import Club
 from app.models.user import User
-from app.core.dependencies import get_current_active_user
+from app.models.member import ClubMember
+from app.core.dependencies import get_current_active_user, require_club_manager, get_club_or_404
 
-router = APIRouter(prefix="/events", tags=["일정"])
+router = APIRouter(tags=["일정"])
 
 
-@router.get("", response_model=List[EventResponse])
+@router.get("/clubs/{club_id}/events", response_model=List[EventResponse])
 async def list_events(
     club_id: int,
     current_user: User = Depends(get_current_active_user),
@@ -20,25 +21,22 @@ async def list_events(
     limit: int = 100
 ):
     """일정 목록 조회"""
+    await get_club_or_404(club_id)
     events = await Event.filter(club_id=club_id, is_deleted=False).offset(skip).limit(limit)
     return [EventResponse.model_validate(event) for event in events]
 
 
-@router.post("", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/clubs/{club_id}/events", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
 async def create_event(
+    club_id: int,
     event_data: EventCreate,
-    current_user: User = Depends(get_current_active_user)
+    membership: ClubMember = Depends(require_club_manager)
 ):
     """일정 생성"""
-    club = await Club.get_or_none(id=event_data.club_id, is_deleted=False)
-    if not club:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="동호회를 찾을 수 없습니다"
-        )
+    await get_club_or_404(club_id)
 
     event = await Event.create(
-        club_id=event_data.club_id,
+        club_id=club_id,
         title=event_data.title,
         event_type=event_data.event_type,
         recurrence_rule=event_data.recurrence_rule
@@ -47,13 +45,15 @@ async def create_event(
     return EventResponse.model_validate(event)
 
 
-@router.get("/{event_id}", response_model=EventResponse)
+@router.get("/clubs/{club_id}/events/{event_id}", response_model=EventResponse)
 async def get_event(
+    club_id: int,
     event_id: int,
     current_user: User = Depends(get_current_active_user)
 ):
     """일정 상세 조회"""
-    event = await Event.get_or_none(id=event_id, is_deleted=False)
+    await get_club_or_404(club_id)
+    event = await Event.get_or_none(id=event_id, club_id=club_id, is_deleted=False)
     if not event:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -62,14 +62,16 @@ async def get_event(
     return EventResponse.model_validate(event)
 
 
-@router.put("/{event_id}", response_model=EventResponse)
+@router.put("/clubs/{club_id}/events/{event_id}", response_model=EventResponse)
 async def update_event(
+    club_id: int,
     event_id: int,
     event_data: EventUpdate,
-    current_user: User = Depends(get_current_active_user)
+    membership: ClubMember = Depends(require_club_manager)
 ):
     """일정 수정"""
-    event = await Event.get_or_none(id=event_id, is_deleted=False)
+    await get_club_or_404(club_id)
+    event = await Event.get_or_none(id=event_id, club_id=club_id, is_deleted=False)
     if not event:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -88,13 +90,15 @@ async def update_event(
     return EventResponse.model_validate(event)
 
 
-@router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/clubs/{club_id}/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_event(
+    club_id: int,
     event_id: int,
-    current_user: User = Depends(get_current_active_user)
+    membership: ClubMember = Depends(require_club_manager)
 ):
     """일정 삭제 (soft delete)"""
-    event = await Event.get_or_none(id=event_id, is_deleted=False)
+    await get_club_or_404(club_id)
+    event = await Event.get_or_none(id=event_id, club_id=club_id, is_deleted=False)
     if not event:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

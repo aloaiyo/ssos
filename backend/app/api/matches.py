@@ -13,33 +13,48 @@ from app.schemas.match import (
     MatchParticipantResponse,
     MatchResultCreate, MatchResultResponse
 )
-from app.models.match import Match, MatchParticipant, MatchResult
+from app.models.match import Match, MatchParticipant, MatchResult, Team
 from app.models.event import Session
 from app.models.user import User
 from app.models.member import ClubMember, MemberRole, MemberStatus
-from app.core.dependencies import get_current_active_user
+from app.core.dependencies import get_current_active_user, require_club_manager, get_club_or_404
 
-router = APIRouter(prefix="/matches", tags=["매칭"])
+router = APIRouter(tags=["매칭"])
 
 
-async def get_session_with_club(session_id: int) -> Session:
-    """세션 조회 및 클럽 정보 포함"""
-    session = await Session.get_or_none(
-        id=session_id, is_deleted=False
-    ).prefetch_related("event__club")
-    if not session:
+async def get_match_with_club_check(match_id: int, club_id: int) -> Match:
+    """매치 조회 및 클럽 소속 확인"""
+    match = await Match.get_or_none(
+        id=match_id, is_deleted=False
+    ).prefetch_related("session__event__club", "session__season")
+
+    if not match:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="세션을 찾을 수 없습니다"
+            detail="매치를 찾을 수 없습니다"
         )
-    return session
+
+    # 클럽 소속 확인
+    match_club_id = None
+    if match.session:
+        if match.session.event:
+            match_club_id = match.session.event.club_id
+        elif match.session.season:
+            match_club_id = match.session.season.club_id
+
+    if match_club_id != club_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="매치를 찾을 수 없습니다"
+        )
+
+    return match
 
 
-async def verify_club_manager(session: Session, user: User) -> ClubMember:
-    """세션 소속 클럽의 매니저인지 확인"""
-    club = session.event.club
+async def verify_club_manager(club_id: int, user: User) -> ClubMember:
+    """클럽의 매니저인지 확인"""
     membership = await ClubMember.get_or_none(
-        club_id=club.id,
+        club_id=club_id,
         user_id=user.id,
         is_deleted=False
     )
@@ -65,11 +80,10 @@ async def verify_club_manager(session: Session, user: User) -> ClubMember:
     return membership
 
 
-async def verify_club_member(session: Session, user: User) -> ClubMember:
-    """세션 소속 클럽의 멤버인지 확인"""
-    club = session.event.club
+async def verify_club_member(club_id: int, user: User) -> ClubMember:
+    """클럽의 멤버인지 확인"""
     membership = await ClubMember.get_or_none(
-        club_id=club.id,
+        club_id=club_id,
         user_id=user.id,
         is_deleted=False
     )
@@ -89,79 +103,34 @@ async def verify_club_member(session: Session, user: User) -> ClubMember:
     return membership
 
 
-@router.get("", response_model=List[MatchResponse])
-async def list_matches(
-    session_id: int,
-    current_user: User = Depends(get_current_active_user),
-    skip: int = 0,
-    limit: int = 100
-):
-    """매치 목록 조회 - 클럽 멤버만 가능"""
-    session = await get_session_with_club(session_id)
-    await verify_club_member(session, current_user)
+# ========== RESTful 엔드포인트: /clubs/{club_id}/matches ========== #
 
-    matches = await Match.filter(
-        session_id=session_id, is_deleted=False
-    ).offset(skip).limit(limit)
-    return [MatchResponse.model_validate(match) for match in matches]
-
-
-@router.post("", response_model=MatchResponse, status_code=status.HTTP_201_CREATED)
-async def create_match(
-    match_data: MatchCreate,
-    current_user: User = Depends(get_current_active_user)
-):
-    """매치 생성 - 클럽 매니저만 가능"""
-    session = await get_session_with_club(match_data.session_id)
-    await verify_club_manager(session, current_user)
-
-    match = await Match.create(
-        session_id=match_data.session_id,
-        match_number=match_data.match_number,
-        court_number=match_data.court_number,
-        scheduled_time=match_data.scheduled_time,
-        match_type=match_data.match_type
-    )
-
-    return MatchResponse.model_validate(match)
-
-
-@router.get("/{match_id}", response_model=MatchResponse)
+@router.get("/clubs/{club_id}/matches/{match_id}", response_model=MatchResponse)
 async def get_match(
+    club_id: int,
     match_id: int,
     current_user: User = Depends(get_current_active_user)
 ):
     """매치 상세 조회 - 클럽 멤버만 가능"""
-    match = await Match.get_or_none(
-        id=match_id, is_deleted=False
-    ).prefetch_related("session__event__club")
-    if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="매치를 찾을 수 없습니다"
-        )
+    await get_club_or_404(club_id)
+    await verify_club_member(club_id, current_user)
 
-    await verify_club_member(match.session, current_user)
+    match = await get_match_with_club_check(match_id, club_id)
     return MatchResponse.model_validate(match)
 
 
-@router.put("/{match_id}", response_model=MatchResponse)
+@router.put("/clubs/{club_id}/matches/{match_id}", response_model=MatchResponse)
 async def update_match(
+    club_id: int,
     match_id: int,
     match_data: MatchUpdate,
     current_user: User = Depends(get_current_active_user)
 ):
     """매치 수정 - 클럽 매니저만 가능"""
-    match = await Match.get_or_none(
-        id=match_id, is_deleted=False
-    ).prefetch_related("session__event__club")
-    if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="매치를 찾을 수 없습니다"
-        )
+    await get_club_or_404(club_id)
+    await verify_club_manager(club_id, current_user)
 
-    await verify_club_manager(match.session, current_user)
+    match = await get_match_with_club_check(match_id, club_id)
 
     # 수정
     if match_data.court_number is not None:
@@ -175,67 +144,52 @@ async def update_match(
     return MatchResponse.model_validate(match)
 
 
-@router.delete("/{match_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/clubs/{club_id}/matches/{match_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_match(
+    club_id: int,
     match_id: int,
     current_user: User = Depends(get_current_active_user)
 ):
     """매치 삭제 (soft delete) - 클럽 매니저만 가능"""
-    match = await Match.get_or_none(
-        id=match_id, is_deleted=False
-    ).prefetch_related("session__event__club")
-    if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="매치를 찾을 수 없습니다"
-        )
+    await get_club_or_404(club_id)
+    await verify_club_manager(club_id, current_user)
 
-    await verify_club_manager(match.session, current_user)
+    match = await get_match_with_club_check(match_id, club_id)
 
     match.is_deleted = True
     await match.save()
 
 
 # 매치 참가자
-@router.get("/{match_id}/participants", response_model=List[MatchParticipantResponse])
+@router.get("/clubs/{club_id}/matches/{match_id}/participants", response_model=List[MatchParticipantResponse])
 async def list_match_participants(
+    club_id: int,
     match_id: int,
     current_user: User = Depends(get_current_active_user)
 ):
     """매치 참가자 목록 조회 - 클럽 멤버만 가능"""
-    match = await Match.get_or_none(
-        id=match_id, is_deleted=False
-    ).prefetch_related("session__event__club")
-    if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="매치를 찾을 수 없습니다"
-        )
+    await get_club_or_404(club_id)
+    await verify_club_member(club_id, current_user)
 
-    await verify_club_member(match.session, current_user)
+    await get_match_with_club_check(match_id, club_id)
 
     participants = await MatchParticipant.filter(match_id=match_id, is_deleted=False)
     return [MatchParticipantResponse.model_validate(p) for p in participants]
 
 
 # 매치 결과
-@router.post("/{match_id}/result", response_model=MatchResultResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/clubs/{club_id}/matches/{match_id}/result", response_model=MatchResultResponse, status_code=status.HTTP_201_CREATED)
 async def create_match_result(
+    club_id: int,
     match_id: int,
     result_data: MatchResultCreate,
     current_user: User = Depends(get_current_active_user)
 ):
     """매치 결과 등록 - 클럽 매니저만 가능"""
-    match = await Match.get_or_none(
-        id=match_id, is_deleted=False
-    ).prefetch_related("session__event__club")
-    if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="매치를 찾을 수 없습니다"
-        )
+    await get_club_or_404(club_id)
+    await verify_club_manager(club_id, current_user)
 
-    await verify_club_manager(match.session, current_user)
+    await get_match_with_club_check(match_id, club_id)
 
     # 이미 결과가 있는지 확인
     existing_result = await MatchResult.get_or_none(match_id=match_id)
@@ -264,22 +218,17 @@ async def create_match_result(
     return MatchResultResponse.model_validate(result)
 
 
-@router.get("/{match_id}/result", response_model=MatchResultResponse)
+@router.get("/clubs/{club_id}/matches/{match_id}/result", response_model=MatchResultResponse)
 async def get_match_result(
+    club_id: int,
     match_id: int,
     current_user: User = Depends(get_current_active_user)
 ):
     """매치 결과 조회 - 클럽 멤버만 가능"""
-    match = await Match.get_or_none(
-        id=match_id, is_deleted=False
-    ).prefetch_related("session__event__club")
-    if not match:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="매치를 찾을 수 없습니다"
-        )
+    await get_club_or_404(club_id)
+    await verify_club_member(club_id, current_user)
 
-    await verify_club_member(match.session, current_user)
+    await get_match_with_club_check(match_id, club_id)
 
     result = await MatchResult.get_or_none(match_id=match_id)
     if not result:
