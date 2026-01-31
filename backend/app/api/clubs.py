@@ -331,6 +331,10 @@ async def update_club(
         club.default_num_courts = club_data.default_num_courts
     if club_data.default_match_duration is not None:
         club.default_match_duration = club_data.default_match_duration
+    if club_data.default_break_duration is not None:
+        club.default_break_duration = club_data.default_break_duration
+    if club_data.default_warmup_duration is not None:
+        club.default_warmup_duration = club_data.default_warmup_duration
     if club_data.location is not None:
         club.location = club_data.location
     # 가입 설정 수정

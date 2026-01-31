@@ -23,6 +23,8 @@ class Club(BaseModel):
     default_end_time = fields.TimeField(null=True)    # 기본 종료 시간
     default_num_courts = fields.IntField(null=True)   # 기본 코트 수
     default_match_duration = fields.IntField(default=30)  # 기본 경기 시간 (분)
+    default_break_duration = fields.IntField(default=5)   # 기본 휴식 시간 (분)
+    default_warmup_duration = fields.IntField(default=10) # 기본 워밍업 시간 (분)
     location = fields.CharField(max_length=500, null=True)  # 활동 장소
 
     # 가입 설정

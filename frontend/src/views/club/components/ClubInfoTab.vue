@@ -80,6 +80,22 @@
               </div>
               <div class="info-value">{{ club?.default_match_duration ? `${club.default_match_duration}분` : '-' }}</div>
             </div>
+
+            <div class="info-item">
+              <div class="info-label">
+                <v-icon size="18" class="mr-1">mdi-timer-pause-outline</v-icon>
+                휴식 시간
+              </div>
+              <div class="info-value">{{ club?.default_break_duration !== null ? `${club.default_break_duration}분` : '-' }}</div>
+            </div>
+
+            <div class="info-item">
+              <div class="info-label">
+                <v-icon size="18" class="mr-1">mdi-run</v-icon>
+                워밍업 시간
+              </div>
+              <div class="info-value">{{ club?.default_warmup_duration !== null ? `${club.default_warmup_duration}분` : '-' }}</div>
+            </div>
           </div>
 
           <!-- 가입 설정 (읽기 모드) -->
@@ -185,6 +201,26 @@
                 label="경기 시간"
                 variant="outlined"
                 density="comfortable"
+              />
+            </v-col>
+            <v-col cols="6" md="3">
+              <v-select
+                v-model="form.default_break_duration"
+                :items="breakDurationOptions"
+                label="휴식 시간"
+                variant="outlined"
+                density="comfortable"
+                prepend-inner-icon="mdi-timer-pause-outline"
+              />
+            </v-col>
+            <v-col cols="6" md="3">
+              <v-select
+                v-model="form.default_warmup_duration"
+                :items="warmupDurationOptions"
+                label="워밍업 시간"
+                variant="outlined"
+                density="comfortable"
+                prepend-inner-icon="mdi-run"
               />
             </v-col>
           </v-row>
@@ -348,6 +384,8 @@ const form = ref({
   location: '',
   default_num_courts: null,
   default_match_duration: 30,
+  default_break_duration: 5,
+  default_warmup_duration: 10,
   is_join_allowed: true,
   requires_approval: false,
   schedules: [],
@@ -364,6 +402,23 @@ const matchDurationOptions = [
   { title: '40분', value: 40 },
   { title: '50분', value: 50 },
   { title: '60분', value: 60 },
+]
+
+const breakDurationOptions = [
+  { title: '없음', value: 0 },
+  { title: '3분', value: 3 },
+  { title: '5분', value: 5 },
+  { title: '10분', value: 10 },
+  { title: '15분', value: 15 },
+]
+
+const warmupDurationOptions = [
+  { title: '없음', value: 0 },
+  { title: '5분', value: 5 },
+  { title: '10분', value: 10 },
+  { title: '15분', value: 15 },
+  { title: '20분', value: 20 },
+  { title: '30분', value: 30 },
 ]
 
 const days = ['월', '화', '수', '목', '금', '토', '일']
@@ -393,6 +448,8 @@ function syncFormFromClub() {
       location: props.club.location || '',
       default_num_courts: props.club.default_num_courts,
       default_match_duration: props.club.default_match_duration || 30,
+      default_break_duration: props.club.default_break_duration ?? 5,
+      default_warmup_duration: props.club.default_warmup_duration ?? 10,
       is_join_allowed: props.club.is_join_allowed ?? true,
       requires_approval: props.club.requires_approval ?? false,
       schedules: (props.club.schedules || []).map(s => ({

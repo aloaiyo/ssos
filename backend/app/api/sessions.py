@@ -45,6 +45,8 @@ class SessionCreate(PydanticBase):
     location: Optional[str] = Field(None, max_length=200)
     num_courts: int = Field(..., ge=1, le=20)
     match_duration_minutes: int = Field(30, ge=10, le=120)
+    break_duration_minutes: int = Field(5, ge=0, le=30)
+    warmup_duration_minutes: int = Field(10, ge=0, le=60)
     session_type: str = Field("league", pattern="^(league|tournament)$")
     season_id: Optional[int] = None
 
@@ -194,6 +196,9 @@ async def list_sessions(
         "end_datetime": to_kst(s.end_datetime).isoformat(),
         "location": s.location,
         "num_courts": s.num_courts,
+        "match_duration_minutes": s.match_duration_minutes,
+        "break_duration_minutes": s.break_duration_minutes,
+        "warmup_duration_minutes": s.warmup_duration_minutes,
         "session_type": s.session_type.value if s.session_type else "league",
         "status": s.status.value,
         "season_id": s.season_id,
@@ -243,6 +248,8 @@ async def create_session(
         location=session_data.location,
         num_courts=session_data.num_courts,
         match_duration_minutes=session_data.match_duration_minutes,
+        break_duration_minutes=session_data.break_duration_minutes,
+        warmup_duration_minutes=session_data.warmup_duration_minutes,
         session_type=SessionType(session_data.session_type),
         status=SessionStatus.CONFIRMED
     )
@@ -259,6 +266,9 @@ async def create_session(
         "end_datetime": to_kst(session.end_datetime).isoformat(),
         "location": session.location,
         "num_courts": session.num_courts,
+        "match_duration_minutes": session.match_duration_minutes,
+        "break_duration_minutes": session.break_duration_minutes,
+        "warmup_duration_minutes": session.warmup_duration_minutes,
         "session_type": session.session_type.value,
         "status": session.status.value,
         "season_id": session.season_id,
@@ -331,6 +341,9 @@ async def get_session(
         "end_datetime": to_kst(session.end_datetime).isoformat(),
         "location": session.location,
         "num_courts": session.num_courts,
+        "match_duration_minutes": session.match_duration_minutes,
+        "break_duration_minutes": session.break_duration_minutes,
+        "warmup_duration_minutes": session.warmup_duration_minutes,
         "session_type": session.session_type.value if session.session_type else "league",
         "status": session.status.value,
         "season_id": session.season_id,
@@ -1245,4 +1258,133 @@ async def confirm_ai_matches(
     return {
         "message": f"{len(matches_created)}개의 경기가 생성되었습니다",
         "match_ids": matches_created
+    }
+
+
+class ScheduleCalculateRequest(PydanticBase):
+    """스케줄 계산 요청"""
+    start_time: time  # 시작 시간 (KST)
+    end_time: time    # 종료 시간 (KST)
+    num_courts: int = Field(..., ge=1, le=20)
+    match_duration_minutes: int = Field(30, ge=10, le=120)
+    break_duration_minutes: int = Field(5, ge=0, le=30)
+    warmup_duration_minutes: int = Field(10, ge=0, le=60)
+
+
+@router.post("/calculate-schedule")
+async def calculate_session_schedule(
+    club_id: int,
+    request: ScheduleCalculateRequest,
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    세션 스케줄 계산 (미리보기용)
+
+    워밍업 → 경기1 → 휴식 → 경기2 → 휴식 → ... → 종료시간 내 최대 경기 수 계산
+    """
+    await get_club_or_404(club_id)
+
+    # 시간 계산 (분 단위)
+    start_minutes = request.start_time.hour * 60 + request.start_time.minute
+    end_minutes = request.end_time.hour * 60 + request.end_time.minute
+
+    # 종료 시간이 시작 시간보다 이른 경우 (자정 넘김)
+    if end_minutes <= start_minutes:
+        end_minutes += 24 * 60
+
+    total_minutes = end_minutes - start_minutes
+    warmup = request.warmup_duration_minutes
+    match_duration = request.match_duration_minutes
+    break_duration = request.break_duration_minutes
+    num_courts = request.num_courts
+
+    # 워밍업 후 실제 경기 가능 시간
+    available_minutes = total_minutes - warmup
+
+    if available_minutes <= 0:
+        return {
+            "total_duration_minutes": total_minutes,
+            "warmup_duration_minutes": warmup,
+            "available_minutes": 0,
+            "max_rounds": 0,
+            "matches_per_round": num_courts,
+            "total_matches": 0,
+            "schedule": [],
+            "actual_end_time": request.start_time.isoformat(),
+            "utilization_percent": 0,
+        }
+
+    # 각 라운드는 (경기 시간 + 휴식 시간), 마지막 라운드는 휴식 불필요
+    # 라운드 수 계산: available = match * rounds + break * (rounds - 1)
+    # available = match * rounds + break * rounds - break
+    # available + break = rounds * (match + break)
+    # rounds = (available + break) / (match + break)
+
+    if match_duration + break_duration > 0:
+        max_rounds = (available_minutes + break_duration) // (match_duration + break_duration)
+    else:
+        max_rounds = 0
+
+    # 최소 1라운드는 가능해야 함
+    if max_rounds < 1 and available_minutes >= match_duration:
+        max_rounds = 1
+
+    # 스케줄 생성
+    schedule = []
+    current_time = start_minutes + warmup  # 워밍업 후 시작
+
+    for round_num in range(1, max_rounds + 1):
+        round_start_hour = (current_time // 60) % 24
+        round_start_min = current_time % 60
+        round_start_str = f"{round_start_hour:02d}:{round_start_min:02d}"
+
+        round_end = current_time + match_duration
+        round_end_hour = (round_end // 60) % 24
+        round_end_min = round_end % 60
+        round_end_str = f"{round_end_hour:02d}:{round_end_min:02d}"
+
+        schedule.append({
+            "round": round_num,
+            "start_time": round_start_str,
+            "end_time": round_end_str,
+            "matches_count": num_courts,  # 코트 수만큼 동시 경기
+            "type": "match",
+        })
+
+        current_time += match_duration
+
+        # 마지막 라운드가 아니면 휴식 추가
+        if round_num < max_rounds and break_duration > 0:
+            break_end = current_time + break_duration
+            break_end_hour = (break_end // 60) % 24
+            break_end_min = break_end % 60
+
+            schedule.append({
+                "round": round_num,
+                "start_time": round_end_str,
+                "end_time": f"{break_end_hour:02d}:{break_end_min:02d}",
+                "type": "break",
+            })
+            current_time += break_duration
+
+    # 실제 종료 시간
+    actual_end_hour = (current_time // 60) % 24
+    actual_end_min = current_time % 60
+    actual_end_str = f"{actual_end_hour:02d}:{actual_end_min:02d}"
+
+    # 사용률 계산
+    used_minutes = current_time - start_minutes
+    utilization = (used_minutes / total_minutes * 100) if total_minutes > 0 else 0
+
+    return {
+        "total_duration_minutes": total_minutes,
+        "warmup_duration_minutes": warmup,
+        "warmup_end_time": f"{((start_minutes + warmup) // 60) % 24:02d}:{(start_minutes + warmup) % 60:02d}",
+        "available_minutes": available_minutes,
+        "max_rounds": max_rounds,
+        "matches_per_round": num_courts,
+        "total_matches": max_rounds * num_courts,
+        "schedule": schedule,
+        "actual_end_time": actual_end_str,
+        "utilization_percent": round(utilization, 1),
     }

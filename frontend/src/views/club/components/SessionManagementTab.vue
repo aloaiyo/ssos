@@ -449,23 +449,90 @@
                 />
               </v-col>
             </v-row>
-            <v-text-field
-              v-model.number="sessionForm.num_courts"
-              label="코트 수"
-              type="number"
-              variant="outlined"
-              min="1"
-              max="20"
-              :rules="[v => v >= 1 || '최소 1개 이상의 코트가 필요합니다']"
-              class="mb-3"
-            />
-            <v-textarea
-              v-model="sessionForm.notes"
-              label="메모 (선택)"
-              variant="outlined"
-              rows="2"
-              hide-details
-            />
+            <v-row>
+              <v-col cols="6">
+                <v-text-field
+                  v-model.number="sessionForm.num_courts"
+                  label="코트 수"
+                  type="number"
+                  variant="outlined"
+                  min="1"
+                  max="20"
+                  density="compact"
+                  :rules="[v => v >= 1 || '최소 1개 이상']"
+                  @update:model-value="calculateSchedule"
+                />
+              </v-col>
+              <v-col cols="6">
+                <v-select
+                  v-model="sessionForm.match_duration_minutes"
+                  :items="matchDurationOptions"
+                  label="경기 시간"
+                  variant="outlined"
+                  density="compact"
+                  @update:model-value="calculateSchedule"
+                />
+              </v-col>
+            </v-row>
+            <v-row>
+              <v-col cols="6">
+                <v-select
+                  v-model="sessionForm.break_duration_minutes"
+                  :items="breakDurationOptions"
+                  label="휴식 시간"
+                  variant="outlined"
+                  density="compact"
+                  @update:model-value="calculateSchedule"
+                />
+              </v-col>
+              <v-col cols="6">
+                <v-select
+                  v-model="sessionForm.warmup_duration_minutes"
+                  :items="warmupDurationOptions"
+                  label="워밍업 시간"
+                  variant="outlined"
+                  density="compact"
+                  @update:model-value="calculateSchedule"
+                />
+              </v-col>
+            </v-row>
+
+            <!-- 스케줄 미리보기 -->
+            <v-expand-transition>
+              <v-card v-if="schedulePreview" variant="tonal" color="primary" class="mb-3">
+                <v-card-text class="pa-3">
+                  <div class="d-flex align-center mb-2">
+                    <v-icon size="18" class="mr-2">mdi-calendar-clock</v-icon>
+                    <span class="font-weight-medium">스케줄 미리보기</span>
+                  </div>
+                  <div class="schedule-preview-grid">
+                    <div class="preview-item">
+                      <span class="preview-label">워밍업</span>
+                      <span class="preview-value">{{ sessionForm.start_time }} ~ {{ schedulePreview.warmup_end_time }}</span>
+                    </div>
+                    <div class="preview-item">
+                      <span class="preview-label">경기 수</span>
+                      <span class="preview-value">{{ schedulePreview.max_rounds }}라운드 × {{ schedulePreview.matches_per_round }}코트 = <strong>{{ schedulePreview.total_matches }}경기</strong></span>
+                    </div>
+                    <div class="preview-item">
+                      <span class="preview-label">종료 예상</span>
+                      <span class="preview-value">{{ schedulePreview.actual_end_time }}</span>
+                    </div>
+                    <div class="preview-item">
+                      <span class="preview-label">시간 활용</span>
+                      <span class="preview-value">
+                        <v-chip
+                          :color="schedulePreview.utilization_percent >= 90 ? 'success' : schedulePreview.utilization_percent >= 70 ? 'warning' : 'error'"
+                          size="x-small"
+                        >
+                          {{ schedulePreview.utilization_percent }}%
+                        </v-chip>
+                      </span>
+                    </div>
+                  </div>
+                </v-card-text>
+              </v-card>
+            </v-expand-transition>
           </v-form>
         </v-card-text>
         <v-card-actions>
@@ -702,8 +769,40 @@ const sessionForm = ref({
   start_time: '10:00',
   end_time: '12:00',
   num_courts: 2,
-  notes: '',
+  match_duration_minutes: 30,
+  break_duration_minutes: 5,
+  warmup_duration_minutes: 10,
 })
+
+// 스케줄 미리보기
+const schedulePreview = ref(null)
+
+// 옵션들
+const matchDurationOptions = [
+  { title: '20분', value: 20 },
+  { title: '25분', value: 25 },
+  { title: '30분', value: 30 },
+  { title: '40분', value: 40 },
+  { title: '50분', value: 50 },
+  { title: '60분', value: 60 },
+]
+
+const breakDurationOptions = [
+  { title: '없음', value: 0 },
+  { title: '3분', value: 3 },
+  { title: '5분', value: 5 },
+  { title: '10분', value: 10 },
+  { title: '15분', value: 15 },
+]
+
+const warmupDurationOptions = [
+  { title: '없음', value: 0 },
+  { title: '5분', value: 5 },
+  { title: '10분', value: 10 },
+  { title: '15분', value: 15 },
+  { title: '20분', value: 20 },
+  { title: '30분', value: 30 },
+]
 
 // 새 경기 폼
 const newMatch = ref({
@@ -1040,26 +1139,57 @@ function formatTimeValue(timeValue) {
   return timeValue
 }
 
+// 스케줄 계산 API 호출
+async function calculateSchedule() {
+  if (!sessionForm.value.start_time || !sessionForm.value.end_time) {
+    schedulePreview.value = null
+    return
+  }
+
+  try {
+    const response = await apiClient.post(`/clubs/${props.clubId}/sessions/calculate-schedule`, {
+      start_time: sessionForm.value.start_time,
+      end_time: sessionForm.value.end_time,
+      num_courts: sessionForm.value.num_courts || 2,
+      match_duration_minutes: sessionForm.value.match_duration_minutes || 30,
+      break_duration_minutes: sessionForm.value.break_duration_minutes || 5,
+      warmup_duration_minutes: sessionForm.value.warmup_duration_minutes || 10,
+    })
+    schedulePreview.value = response.data
+  } catch (error) {
+    schedulePreview.value = null
+  }
+}
+
 // 세션 CRUD
 function openCreateDialog() {
   editingSession.value = null
 
   const nextSchedule = getNextScheduledDate()
   const defaultCourts = props.club?.default_num_courts || 2
+  const defaultMatchDuration = props.club?.default_match_duration || 30
+  const defaultBreakDuration = props.club?.default_break_duration ?? 5
+  const defaultWarmupDuration = props.club?.default_warmup_duration ?? 10
 
   sessionForm.value = {
     date: nextSchedule.date,
     start_time: nextSchedule.start_time,
     end_time: nextSchedule.end_time,
     num_courts: defaultCourts,
-    notes: '',
+    match_duration_minutes: defaultMatchDuration,
+    break_duration_minutes: defaultBreakDuration,
+    warmup_duration_minutes: defaultWarmupDuration,
   }
   showCreateDialog.value = true
+
+  // 스케줄 미리보기 계산
+  setTimeout(() => calculateSchedule(), 100)
 }
 
 function closeCreateDialog() {
   showCreateDialog.value = false
   editingSession.value = null
+  schedulePreview.value = null
 }
 
 async function saveSession() {
@@ -1559,5 +1689,27 @@ onMounted(() => {
   justify-content: center;
   padding: 40px;
   text-align: center;
+}
+
+/* 스케줄 미리보기 */
+.schedule-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.preview-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.preview-label {
+  font-size: 0.75rem;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.preview-value {
+  font-size: 0.875rem;
 }
 </style>

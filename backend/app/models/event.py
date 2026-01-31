@@ -128,6 +128,7 @@ class Session(BaseModel):
     num_courts = fields.IntField()
     match_duration_minutes = fields.IntField()
     break_duration_minutes = fields.IntField(null=True)
+    warmup_duration_minutes = fields.IntField(null=True)  # 워밍업 시간 (분)
     session_type = fields.CharEnumField(SessionType, default=SessionType.LEAGUE)  # 리그/토너먼트
     status = fields.CharEnumField(SessionStatus, default=SessionStatus.DRAFT)
     created_at = fields.DatetimeField(auto_now_add=True)

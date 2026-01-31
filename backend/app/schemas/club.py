@@ -19,6 +19,8 @@ class ClubCreate(ClubBase):
     # 기본 정보
     default_num_courts: Optional[int] = None
     default_match_duration: Optional[int] = 30
+    default_break_duration: Optional[int] = 5
+    default_warmup_duration: Optional[int] = 10
     location: Optional[str] = None
     # 가입 설정
     is_join_allowed: bool = True
@@ -34,6 +36,8 @@ class ClubUpdate(BaseModel):
     # 기본 정보
     default_num_courts: Optional[int] = None
     default_match_duration: Optional[int] = None
+    default_break_duration: Optional[int] = None
+    default_warmup_duration: Optional[int] = None
     location: Optional[str] = None
     # 가입 설정
     is_join_allowed: Optional[bool] = None
@@ -52,6 +56,8 @@ class ClubResponse(ClubBase):
     # 기본 정보
     default_num_courts: Optional[int] = None
     default_match_duration: Optional[int] = None
+    default_break_duration: Optional[int] = None
+    default_warmup_duration: Optional[int] = None
     location: Optional[str] = None
     # 가입 설정
     is_join_allowed: bool = True
