@@ -51,12 +51,14 @@ ssos/
 
 | 기능 | 파일 |
 |------|------|
-| 매칭 알고리즘 | `backend/app/services/matching_service.py` |
+| 매칭 알고리즘 | `backend/app/services/matching_service.py`, `ai_matching_service.py` |
 | 인증 흐름 | `backend/app/services/auth_service.py`, `cognito_service.py` |
 | 권한 체크 | `backend/app/core/dependencies.py` |
+| OCR 처리 | `backend/app/services/ocr_service.py` |
 | API 클라이언트 | `frontend/src/api/index.js` |
 | 라우팅 | `frontend/src/router/index.js` |
 | 메인 레이아웃 | `frontend/src/components/layout/` |
+| 홈 대시보드 | `frontend/src/views/HomeView.vue` |
 
 ### 주요 Enum 값
 
@@ -166,4 +168,4 @@ User (전역)
 
 ---
 
-*Last Updated: 2026-01-19*
+*Last Updated: 2026-01-31*

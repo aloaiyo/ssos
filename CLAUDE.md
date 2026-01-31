@@ -124,8 +124,12 @@ backend/app/
 │   ├── event.py, match.py, ranking.py   # Game management
 │   └── guest.py, fee.py, announcement.py # Auxiliary features
 ├── schemas/      # Pydantic V2 schemas
-├── api/          # FastAPI routes
-├── services/     # Business logic (auth_service, cognito_service, matching_service)
+├── api/          # FastAPI routes (sessions.py가 가장 복잡, 매칭 생성 포함)
+├── services/     # Business logic
+│   ├── auth_service.py, cognito_service.py  # 인증
+│   ├── matching_service.py                   # 기본 매칭 알고리즘
+│   ├── ai_matching_service.py                # AI 기반 매칭
+│   └── ocr_service.py                        # 결과 이미지 OCR
 ├── core/         # security.py (JWT), dependencies.py (DI with cookie auth)
 └── config.py     # Settings with AWS SSM support
 ```
@@ -134,17 +138,23 @@ backend/app/
 
 ```
 frontend/src/
-├── views/        # Page components (auth/, club/, member/, session/, season/, match/, ranking/)
+├── views/        # Page components (auth/, club/, member/, session/, season/, match/, ranking/, profile/)
 ├── components/   # Reusable (layout/, common/, match/)
 ├── stores/       # Pinia stores (auth, club, member, session, season, match, ranking)
 ├── api/          # Axios clients (withCredentials: true for cookies)
-├── router/       # Vue Router with auth guards
+├── router/       # Vue Router with auth guards + profile completion check
+├── utils/        # date.js (날짜 포맷), sanitize 등
 └── plugins/      # Vuetify config
 ```
 
+**Router Guard Flow**:
+1. 인증 체크 → 미인증 시 로그인 페이지
+2. 프로필 완성 체크 → 미완성 시 프로필 완성 페이지로 리다이렉트
+3. 관리자 권한 체크 (특정 페이지)
+
 ## Core Algorithm: Match Generation
 
-**Location**: `backend/app/services/matching_service.py`
+**Location**: `backend/app/services/matching_service.py` (기본), `ai_matching_service.py` (AI 기반)
 
 Generates fair game schedules from session participants:
 1. Group by match type (mens_doubles, mixed_doubles, singles)
@@ -154,8 +164,12 @@ Generates fair game schedules from session participants:
 
 **Match Types**:
 - `MENS_DOUBLES` (남복): 4 male (2v2)
+- `WOMENS_DOUBLES` (여복): 4 female (2v2)
 - `MIXED_DOUBLES` (혼복): 2 male + 2 female (1m+1f vs 1m+1f)
 - `SINGLES` (단식): 2 players (1v1)
+
+**Additional Services**:
+- `ocr_service.py` - 경기 결과 이미지 OCR 처리 (Google Gemini API)
 
 ## Development Patterns
 
@@ -264,6 +278,8 @@ function formatContent(content) {
 - **Frontend ports**: Vite may use 5173 if 3000 is taken; update CORS_ORIGINS accordingly
 - **v-html**: 사용자 입력을 v-html로 렌더링 시 반드시 DOMPurify 사용 (XSS 방지)
 - **ESLint**: ESLint 9 flat config 사용 (`eslint.config.js`), 기존 `.eslintrc` 형식 사용 불가
+- **Router Order**: `/clubs/create`가 `/clubs/:id`보다 먼저 정의되어야 함 (동적 라우트 우선순위)
+- **Profile Completion**: 신규 사용자는 gender, birth_date 입력 전까지 프로필 완성 페이지로 리다이렉트됨
 
 ## API Documentation
 
