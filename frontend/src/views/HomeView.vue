@@ -162,18 +162,6 @@
           </div>
         </div>
 
-        <!-- 빠른 액션 카드들 -->
-        <div
-          v-if="isManagerOfSelectedClub"
-          class="bento-item bento-action glass-card hover-lift"
-          @click="router.push({ name: 'club-manage' })"
-        >
-          <div class="action-icon gradient-primary">
-            <v-icon>mdi-cog</v-icon>
-          </div>
-          <span class="action-label">동호회 관리</span>
-        </div>
-
         <!-- Top 5 랭킹 카드 -->
         <div class="bento-item bento-ranking glass-card">
           <div class="card-header">
