@@ -117,7 +117,7 @@
               color="primary"
               variant="flat"
               size="small"
-              @click="showAIGenerateDialog = true"
+              @click="openAIGenerateDialog"
               :disabled="participants.length < 4"
             >
               <v-icon start size="18">mdi-robot</v-icon>
@@ -132,7 +132,7 @@
               color="primary"
               variant="flat"
               class="mt-3"
-              @click="showAIGenerateDialog = true"
+              @click="openAIGenerateDialog"
               :disabled="participants.length < 4"
             >
               <v-icon start>mdi-robot</v-icon>
@@ -544,6 +544,17 @@ const aiGenerateForm = ref({
   match_duration_minutes: 30,
   break_duration_minutes: 5
 })
+
+function openAIGenerateDialog() {
+  // 동호회 설정값으로 초기화
+  aiGenerateForm.value = {
+    mode: 'balanced',
+    match_duration_minutes: selectedClub.value?.default_match_duration || session.value?.match_duration_minutes || 30,
+    break_duration_minutes: selectedClub.value?.default_break_duration ?? session.value?.break_duration_minutes ?? 5
+  }
+  aiGenerateError.value = ''
+  showAIGenerateDialog.value = true
+}
 
 // 세션 수정
 const showEditDialog = ref(false)
