@@ -412,28 +412,34 @@ function formatDateForInput(date) {
   return `${year}-${month}-${day}`
 }
 
+function initSessionForm(date) {
+  // 동호회 설정값으로 초기화
+  const club = selectedClub.value
+  sessionForm.value = {
+    date: formatDateForInput(date),
+    start_time: '09:00',
+    end_time: '12:00',
+    location: club?.location || '',
+    num_courts: club?.default_num_courts || 4,
+    match_duration_minutes: club?.default_match_duration || 30,
+    notes: ''
+  }
+}
+
 function openCreateDialog() {
   // 기본 날짜: 오늘
-  sessionForm.value.date = formatDateForInput(new Date())
+  initSessionForm(new Date())
   showCreateDialog.value = true
 }
 
 function openCreateDialogForDate(date) {
-  sessionForm.value.date = formatDateForInput(date)
+  initSessionForm(date)
   showCreateDialog.value = true
 }
 
 function closeCreateDialog() {
   showCreateDialog.value = false
-  sessionForm.value = {
-    date: '',
-    start_time: '09:00',
-    end_time: '12:00',
-    location: '',
-    num_courts: 4,
-    match_duration_minutes: 30,
-    notes: ''
-  }
+  initSessionForm(new Date())
 }
 
 async function createSession() {
