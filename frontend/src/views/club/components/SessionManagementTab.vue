@@ -429,6 +429,14 @@
               :rules="[v => !!v || '날짜를 선택하세요']"
               class="mb-3"
             />
+            <v-text-field
+              v-model="sessionForm.location"
+              label="장소"
+              variant="outlined"
+              prepend-inner-icon="mdi-map-marker"
+              placeholder="예: OO 테니스장"
+              class="mb-3"
+            />
             <v-row>
               <v-col cols="6">
                 <v-text-field
@@ -768,6 +776,7 @@ const sessionForm = ref({
   date: getTomorrowDate(),
   start_time: '10:00',
   end_time: '12:00',
+  location: '',
   num_courts: 2,
   match_duration_minutes: 30,
   break_duration_minutes: 5,
@@ -1170,11 +1179,13 @@ function openCreateDialog() {
   const defaultMatchDuration = props.club?.default_match_duration || 30
   const defaultBreakDuration = props.club?.default_break_duration ?? 5
   const defaultWarmupDuration = props.club?.default_warmup_duration ?? 10
+  const defaultLocation = props.club?.location || ''
 
   sessionForm.value = {
     date: nextSchedule.date,
     start_time: nextSchedule.start_time,
     end_time: nextSchedule.end_time,
+    location: defaultLocation,
     num_courts: defaultCourts,
     match_duration_minutes: defaultMatchDuration,
     break_duration_minutes: defaultBreakDuration,
