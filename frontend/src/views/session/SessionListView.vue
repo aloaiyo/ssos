@@ -212,6 +212,26 @@
                   placeholder="추가 안내사항"
                 />
               </v-col>
+
+              <!-- 시즌 없음 경고 -->
+              <v-col v-if="showNoSeasonWarning" cols="12">
+                <v-alert
+                  type="warning"
+                  variant="tonal"
+                  icon="mdi-alert"
+                  density="compact"
+                >
+                  <div class="d-flex flex-column">
+                    <strong>해당 날짜에 활성 시즌이 없습니다</strong>
+                    <span class="text-body-2 mt-1">
+                      시즌 없이 생성된 세션은 랭킹에 반영되지 않습니다.
+                      <router-link :to="{ name: 'season-list' }" class="text-warning font-weight-medium">
+                        시즌을 먼저 생성해주세요.
+                      </router-link>
+                    </span>
+                  </div>
+                </v-alert>
+              </v-col>
             </v-row>
           </v-form>
         </v-card-text>
@@ -253,6 +273,7 @@ const isManager = computed(() => clubStore.isManagerOfSelectedClub)
 const isLoading = ref(false)
 const isSaving = ref(false)
 const sessions = ref([])
+const seasons = ref([])
 const currentDate = ref(new Date())
 const selectedDay = ref(null)
 
@@ -425,6 +446,42 @@ async function loadSessions() {
   }
 }
 
+async function loadSeasons() {
+  if (!selectedClub.value?.id) return
+  try {
+    const response = await apiClient.get(`/clubs/${selectedClub.value.id}/seasons`)
+    seasons.value = response.data || []
+  } catch (error) {
+    console.error('시즌 목록 로드 실패:', error)
+    seasons.value = []
+  }
+}
+
+// 특정 날짜에 해당하는 활성 시즌 찾기
+function findSeasonForDate(dateStr) {
+  if (!dateStr || !seasons.value.length) return null
+
+  const targetDate = new Date(dateStr)
+  targetDate.setHours(0, 0, 0, 0)
+
+  return seasons.value.find(season => {
+    if (season.status === 'completed') return false
+
+    const startDate = new Date(season.start_date)
+    const endDate = new Date(season.end_date)
+    startDate.setHours(0, 0, 0, 0)
+    endDate.setHours(23, 59, 59, 999)
+
+    return targetDate >= startDate && targetDate <= endDate
+  })
+}
+
+// 시즌 없음 경고 표시 여부
+const showNoSeasonWarning = computed(() => {
+  if (!sessionForm.value.date) return false
+  return !findSeasonForDate(sessionForm.value.date)
+})
+
 // 세션 생성 관련 함수들
 function formatDateForInput(date) {
   const year = date.getFullYear()
@@ -468,13 +525,17 @@ async function createSession() {
 
   isSaving.value = true
   try {
+    // 세션 날짜에 해당하는 시즌 자동 연결
+    const matchingSeason = findSeasonForDate(sessionForm.value.date)
+
     await apiClient.post(`/clubs/${selectedClub.value.id}/sessions`, {
       date: sessionForm.value.date,
       start_time: sessionForm.value.start_time,
       end_time: sessionForm.value.end_time,
       location: sessionForm.value.location || null,
       num_courts: sessionForm.value.num_courts,
-      match_duration_minutes: sessionForm.value.match_duration_minutes
+      match_duration_minutes: sessionForm.value.match_duration_minutes,
+      season_id: matchingSeason?.id || null
     })
     closeCreateDialog()
     await loadSessions()
@@ -493,6 +554,7 @@ async function createSession() {
 
 watch(selectedClub, () => {
   loadSessions()
+  loadSeasons()
 })
 
 watch(currentDate, () => {
@@ -502,6 +564,7 @@ watch(currentDate, () => {
 
 onMounted(() => {
   loadSessions()
+  loadSeasons()
   goToToday()
 })
 </script>
