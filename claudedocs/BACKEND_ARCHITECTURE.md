@@ -209,6 +209,23 @@ class Settings(BaseSettings):
 
 ## 주요 패턴
 
+### Timezone 처리 (UTC 저장, KST 응답)
+```python
+from app.core.timezone import KST, to_utc, to_kst
+
+# 저장 시: KST → UTC 변환
+start_kst = datetime.combine(date, start_time, tzinfo=KST)
+start_datetime_utc = to_utc(start_kst)
+await Session.create(start_datetime=start_datetime_utc, ...)
+
+# 조회 시: UTC → KST 변환
+return {"date": session.date.isoformat()}  # 프로퍼티가 자동 변환
+```
+
+**Session 모델**:
+- 저장 필드: `start_datetime`, `end_datetime` (UTC)
+- KST 프로퍼티: `date`, `start_time`, `end_time` (자동 변환)
+
 ### Soft Delete
 ```python
 # 모든 쿼리에서 is_deleted=False 필터 적용
@@ -284,4 +301,4 @@ def get_participant_name(self):
 
 ---
 
-*Last Updated: 2026-01-19*
+*Last Updated: 2026-02-01*

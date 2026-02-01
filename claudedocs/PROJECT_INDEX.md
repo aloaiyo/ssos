@@ -148,11 +148,16 @@ User (전역)
 - 여복(WOMENS_DOUBLES) 지원
 - 코드 품질 개선 (ESLint, DOMPurify)
 
-### Phase 3 (예정)
+### Phase 3 (진행중)
+- OCR 경기 결과 업로드 개선 (시즌/세션 생성, 선수 매핑)
+- 타임존 처리 개선 (UTC 저장, KST 표시)
+- 캘린더 UX 개선 (빈 날짜 클릭 → 세션 생성)
+- 동호회 기본 설정값 연동
+
+### Phase 4 (예정)
 - 매칭 알고리즘 최적화
 - 드래그 앤 드롭 매칭 수정
 - 고급 통계 대시보드
-- OCR 결과 입력 고도화
 
 ---
 
@@ -168,4 +173,15 @@ User (전역)
 
 ---
 
-*Last Updated: 2026-01-31*
+## 주요 Gotcha
+
+| 이슈 | 원인 | 해결 |
+|------|------|------|
+| 날짜가 하루 밀림 | JS `toISOString()`이 UTC로 변환 | 로컬 날짜 컴포넌트 사용 |
+| Session 생성 에러 | `date`/`start_time` 대신 `start_datetime` 필요 | UTC datetime으로 변환 |
+| 동호회 설정값 안 뜸 | `get_my_clubs` API에 필드 누락 | 응답에 설정 필드 추가 |
+| 에러 메시지 안 뜸 | 프론트엔드 catch 블록 | `error.response?.data?.detail` 사용 |
+
+---
+
+*Last Updated: 2026-02-01*
