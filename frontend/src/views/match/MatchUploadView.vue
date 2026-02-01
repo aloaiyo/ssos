@@ -1078,6 +1078,34 @@ onMounted(() => {
   margin-bottom: 24px;
 }
 
+/* 모바일에서 스텝 인디케이터 반응형 처리 */
+@media (max-width: 600px) {
+  .stepper :deep(.v-stepper-header) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 8px 0;
+  }
+
+  .stepper :deep(.v-stepper-item) {
+    flex: 0 0 auto;
+    min-width: 70px;
+    padding: 0 4px;
+  }
+
+  .stepper :deep(.v-stepper-item__title) {
+    font-size: 0.65rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 60px;
+  }
+
+  .stepper :deep(.v-divider) {
+    min-width: 12px;
+    flex: 0 0 12px;
+  }
+}
+
 .step-content {
   min-height: 400px;
 }

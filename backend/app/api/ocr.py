@@ -186,6 +186,9 @@ async def save_extracted_matches(
             )
 
         from app.models.event import Event, EventType
+        from app.core.timezone import KST, to_utc
+        from datetime import datetime
+
         # 기본 이벤트 찾기 또는 생성
         event = None
         if not season:
@@ -197,15 +200,23 @@ async def save_extracted_matches(
                     event_type=EventType.REGULAR
                 )
 
+        # KST date+time → UTC datetime 변환
+        start_time = request.session_start_time or time(9, 0)
+        end_time = request.session_end_time or time(12, 0)
+        start_kst = datetime.combine(request.session_date, start_time, tzinfo=KST)
+        end_kst = datetime.combine(request.session_date, end_time, tzinfo=KST)
+        start_datetime_utc = to_utc(start_kst)
+        end_datetime_utc = to_utc(end_kst)
+
         session = await Session.create(
             event=event,
             season=season,
             title=request.session_title or f"경기 결과 ({request.session_date})",
-            date=request.session_date,
-            start_time=request.session_start_time or time(9, 0),
-            end_time=request.session_end_time or time(12, 0),
+            start_datetime=start_datetime_utc,
+            end_datetime=end_datetime_utc,
             location=request.session_location or "",
             num_courts=4,
+            match_duration_minutes=30,
             session_type=SessionType.LEAGUE,
             status=SessionStatus.CONFIRMED
         )
@@ -301,7 +312,7 @@ async def save_extracted_matches(
             session=session,
             match_number=match_count + 1,
             court_number=match_data.court_number,
-            scheduled_time=session.start_time,
+            scheduled_datetime=session.start_datetime,
             match_type=match_type,
             status=MatchStatus.COMPLETED
         )
