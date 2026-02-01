@@ -171,17 +171,21 @@ async def list_sessions(
     current_user: User = Depends(get_current_active_user)
 ):
     """세션 목록 조회"""
+    from tortoise.expressions import Q
+
     club = await get_club_or_404(club_id)
 
-    # 시즌 필터링 또는 이벤트 기반 조회
+    # 시즌 필터링 또는 전체 조회
     if season_id:
+        # 특정 시즌의 세션만 조회
         sessions = await Session.filter(
             season_id=season_id, is_deleted=False
         ).prefetch_related("season", "participants__club_member__user").order_by("-start_datetime")
     else:
-        # 기존 이벤트 기반 조회 (하위 호환성)
+        # 클럽의 모든 세션 조회 (이벤트 또는 시즌을 통해 연결된 모든 세션)
         sessions = await Session.filter(
-            event__club=club, is_deleted=False
+            Q(event__club_id=club_id) | Q(season__club_id=club_id),
+            is_deleted=False
         ).prefetch_related("event", "season", "participants__club_member__user").order_by("-start_datetime")
 
     return [{
