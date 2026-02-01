@@ -46,7 +46,8 @@ services/       # Logic
 
 core/           # Infrastructure
 ├── security.py      # JWT encode/decode
-└── dependencies.py  # DI (get_current_user, require_club_manager, etc.)
+├── dependencies.py  # DI (get_current_user, require_club_manager, etc.)
+└── timezone.py      # UTC/KST conversion (to_utc, to_kst, KST) ★
 
 config.py       # Settings, CORS, Tortoise config
 main.py         # FastAPI app entry
@@ -137,6 +138,25 @@ npm run build
 npm run lint:fix
 ```
 
+## Timezone Pattern
+
+```python
+# Backend: UTC 저장, KST 응답
+from app.core.timezone import KST, to_utc, to_kst
+
+# 저장: KST → UTC
+start_kst = datetime.combine(date, time, tzinfo=KST)
+await Session.create(start_datetime=to_utc(start_kst), ...)
+
+# 조회: Session.date/start_time/end_time 프로퍼티 = KST 자동 변환
+```
+
+```javascript
+// Frontend: toISOString() 사용 금지 (UTC 변환됨)
+// ❌ date.toISOString().split('T')[0]  // 날짜 밀림
+// ✅ `${year}-${month}-${day}`  // 로컬 날짜
+```
+
 ## Gotchas
 
 - Tortoise: ALL ops need `await` (.count(), .exists())
@@ -145,6 +165,16 @@ npm run lint:fix
 - v-html: DOMPurify required
 - Router: `/clubs/create` before `/clubs/:id`
 - Profile: Redirect to completion if missing gender/birth_date
+- **Timezone**: JS `toISOString()` → UTC 변환 → 날짜 하루 밀림
+- **Session model**: `date`/`start_time`/`end_time` = KST 프로퍼티, 실제 필드는 `start_datetime`/`end_datetime` (UTC)
+- **API response**: `get_my_clubs`에 동호회 설정값(location, default_num_courts 등) 포함 필요
+- **Error handling**: `error.response?.data?.detail || '기본 메시지'`
+
+## Stats
+
+- Backend: 8,693 lines (47 Python files)
+- Frontend: 18,920 lines (31 Vue + 13 JS)
+- Total: ~27K lines
 
 ---
-*Compressed index for token efficiency*
+*Updated: 2026-02-01 | Compressed index for token efficiency*
