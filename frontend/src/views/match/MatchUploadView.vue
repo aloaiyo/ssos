@@ -515,6 +515,7 @@ import seasonsApi from '@/api/seasons'
 import sessionsApi from '@/api/sessions'
 import membersApi from '@/api/members'
 import * as guestsApi from '@/api/guests'
+import { getMatchTypeColor, getMatchTypeLabel } from '@/utils/constants'
 
 const router = useRouter()
 const clubStore = useClubStore()
@@ -926,23 +927,7 @@ function formatDate(dateStr) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
 }
 
-function getMatchTypeColor(type) {
-  const colors = {
-    mens_doubles: 'blue',
-    mixed_doubles: 'purple',
-    singles: 'green'
-  }
-  return colors[type] || 'grey'
-}
-
-function getMatchTypeLabel(type) {
-  const labels = {
-    mens_doubles: '남복',
-    mixed_doubles: '혼복',
-    singles: '단식'
-  }
-  return labels[type] || type
-}
+// getMatchTypeColor, getMatchTypeLabel → imported from @/utils/constants
 
 function removeMatch(index) {
   extractedResult.value.matches.splice(index, 1)

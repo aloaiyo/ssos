@@ -28,6 +28,8 @@ export default [
         Blob: 'readonly',
         URL: 'readonly',
         URLSearchParams: 'readonly',
+        alert: 'readonly',
+        confirm: 'readonly',
         // Node.js globals (for config files)
         process: 'readonly',
         __dirname: 'readonly',
@@ -45,6 +47,7 @@ export default [
       'vue/max-attributes-per-line': 'off',
       'vue/singleline-html-element-content-newline': 'off',
       'vue/html-self-closing': 'off',
+      'vue/valid-v-slot': ['error', { allowModifiers: true }], // Vuetify scoped slots
     },
   },
   {

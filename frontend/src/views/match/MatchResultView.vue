@@ -193,6 +193,7 @@ import { useRouter } from 'vue-router'
 import { useClubStore } from '@/stores/club'
 import sessionsApi from '@/api/sessions'
 import seasonsApi from '@/api/seasons'
+import { getMatchTypeColor, getMatchTypeLabel, DAY_OF_WEEK } from '@/utils/constants'
 
 const router = useRouter()
 const clubStore = useClubStore()
@@ -219,27 +220,8 @@ function formatDate(dateStr) {
   const d = new Date(dateStr)
   const month = d.getMonth() + 1
   const day = d.getDate()
-  const weekdays = ['일', '월', '화', '수', '목', '금', '토']
-  const weekday = weekdays[d.getDay()]
+  const weekday = DAY_OF_WEEK[d.getDay()]
   return `${month}/${day} (${weekday})`
-}
-
-function getMatchTypeColor(type) {
-  const colors = {
-    mens_doubles: 'blue',
-    mixed_doubles: 'purple',
-    singles: 'green'
-  }
-  return colors[type] || 'grey'
-}
-
-function getMatchTypeLabel(type) {
-  const labels = {
-    mens_doubles: '남복',
-    mixed_doubles: '혼복',
-    singles: '단식'
-  }
-  return labels[type] || type
 }
 
 function goBack() {

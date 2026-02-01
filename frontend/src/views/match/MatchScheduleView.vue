@@ -93,6 +93,15 @@
       </div>
     </div>
 
+    <!-- 클럽 선택 안됨 -->
+    <v-card v-else-if="!isLoading && !selectedClub" class="empty-card" variant="flat">
+      <v-card-text class="text-center py-12">
+        <v-icon size="64" color="grey-lighten-1">mdi-account-group</v-icon>
+        <h3 class="text-h6 mt-4 text-grey">동호회를 선택해주세요</h3>
+        <p class="text-grey mt-2">상단 메뉴에서 동호회를 선택하면 경기 기록을 볼 수 있습니다</p>
+      </v-card-text>
+    </v-card>
+
     <!-- 빈 상태 -->
     <v-card v-else-if="!isLoading" class="empty-card" variant="flat">
       <v-card-text class="text-center py-12">
@@ -114,6 +123,13 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useClubStore } from '@/stores/club'
 import { useAuthStore } from '@/stores/auth'
 import apiClient from '@/api'
+import {
+  getSessionStatusColor,
+  getSessionStatusLabel,
+  getMatchTypeColor,
+  getMatchTypeLabel,
+  DAY_OF_WEEK
+} from '@/utils/constants'
 
 const clubStore = useClubStore()
 const authStore = useAuthStore()
@@ -135,8 +151,7 @@ function formatDate(dateStr) {
   const date = new Date(dateStr)
   const month = date.getMonth() + 1
   const day = date.getDate()
-  const weekdays = ['일', '월', '화', '수', '목', '금', '토']
-  const weekday = weekdays[date.getDay()]
+  const weekday = DAY_OF_WEEK[date.getDay()]
   return `${month}/${day} (${weekday})`
 }
 
@@ -150,43 +165,9 @@ function toggleSession(sessionId) {
   }
 }
 
-function getStatusColor(status) {
-  const colors = {
-    scheduled: 'primary',
-    in_progress: 'warning',
-    completed: 'success',
-    cancelled: 'grey'
-  }
-  return colors[status] || 'grey'
-}
-
-function getStatusLabel(status) {
-  const labels = {
-    scheduled: '예정',
-    in_progress: '진행중',
-    completed: '완료',
-    cancelled: '취소'
-  }
-  return labels[status] || status
-}
-
-function getMatchTypeColor(type) {
-  const colors = {
-    mens_doubles: 'blue',
-    mixed_doubles: 'purple',
-    singles: 'orange'
-  }
-  return colors[type] || 'grey'
-}
-
-function getMatchTypeLabel(type) {
-  const labels = {
-    mens_doubles: '남복',
-    mixed_doubles: '혼복',
-    singles: '단식'
-  }
-  return labels[type] || type
-}
+// getStatusColor/Label → getSessionStatusColor/Label (from constants)
+const getStatusColor = getSessionStatusColor
+const getStatusLabel = getSessionStatusLabel
 
 function isMyMatch(match) {
   if (!currentUser.value?.id) return false

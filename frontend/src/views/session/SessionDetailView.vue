@@ -53,6 +53,32 @@
             참가 중입니다
           </p>
         </div>
+
+        <!-- 경기 결과 입력 유도 배너 (지난 세션 & 결과 미입력) -->
+        <v-alert
+          v-if="showResultPrompt"
+          type="warning"
+          variant="tonal"
+          class="mt-4 result-prompt-alert"
+          icon="mdi-tennis"
+        >
+          <div class="result-prompt-content">
+            <div>
+              <strong>경기가 완료되었나요?</strong>
+              <p class="text-body-2 mt-1 mb-0">경기 결과를 입력해주세요. 결과가 입력되어야 랭킹에 반영됩니다.</p>
+            </div>
+            <v-btn
+              color="warning"
+              variant="flat"
+              size="small"
+              class="mt-2"
+              @click="goToMatchTab"
+            >
+              <v-icon start size="18">mdi-pencil</v-icon>
+              결과 입력하기
+            </v-btn>
+          </div>
+        </v-alert>
       </div>
 
       <!-- 탭 메뉴 -->
@@ -511,12 +537,44 @@ import { useRoute, useRouter } from 'vue-router'
 import { useClubStore } from '@/stores/club'
 import sessionsApi from '@/api/sessions'
 import clubsApi from '@/api/clubs'
+import {
+  getSessionTypeColor,
+  getSessionTypeLabel,
+  getMatchTypeColor,
+  getMatchTypeLabel,
+  getGenderLabel,
+  DAY_OF_WEEK
+} from '@/utils/constants'
 
 const route = useRoute()
 const router = useRouter()
 const clubStore = useClubStore()
 
 const selectedClub = computed(() => clubStore.selectedClub)
+const isManager = computed(() => clubStore.isManagerOfSelectedClub)
+
+// 세션이 지났는지 확인
+const isPastSession = computed(() => {
+  if (!session.value?.date || !session.value?.end_time) return false
+  const sessionEndStr = `${session.value.date}T${session.value.end_time}`
+  const sessionEnd = new Date(sessionEndStr)
+  return sessionEnd < new Date()
+})
+
+// 경기 결과가 모두 입력되었는지 확인
+const hasAllResults = computed(() => {
+  if (matches.value.length === 0) return true
+  return matches.value.every(m => (m.score_a !== null && m.score_a !== undefined) || (m.score_b !== null && m.score_b !== undefined))
+})
+
+// 결과 입력 유도 배너 표시 여부
+const showResultPrompt = computed(() => {
+  return isPastSession.value && matches.value.length > 0 && !hasAllResults.value && isManager.value
+})
+
+function goToMatchTab() {
+  activeTab.value = 'matches'
+}
 
 const isLoading = ref(true)
 const session = ref(null)
@@ -621,37 +679,8 @@ const availableMembers = computed(() => {
   return clubMembers.value.filter(m => !participantIds.includes(m.id))
 })
 
-function getSessionTypeColor(type) {
-  return type === 'tournament' ? 'warning' : 'primary'
-}
-
-function getSessionTypeLabel(type) {
-  return type === 'tournament' ? '토너먼트' : '리그'
-}
-
-function getMatchTypeColor(type) {
-  const colors = {
-    mens_doubles: 'blue',
-    womens_doubles: 'pink',
-    mixed_doubles: 'purple',
-    singles: 'green'
-  }
-  return colors[type] || 'grey'
-}
-
-function getMatchTypeLabel(type) {
-  const labels = {
-    mens_doubles: '남복',
-    womens_doubles: '여복',
-    mixed_doubles: '혼복',
-    singles: '단식'
-  }
-  return labels[type] || type
-}
-
-function getGenderLabel(gender) {
-  return gender === 'male' ? '남성' : gender === 'female' ? '여성' : ''
-}
+// getSessionTypeColor, getSessionTypeLabel, getMatchTypeColor, getMatchTypeLabel, getGenderLabel
+// → imported from @/utils/constants
 
 function getInitials(name) {
   if (!name) return '?'
@@ -675,8 +704,7 @@ function formatDateDisplay(date) {
   const year = d.getFullYear()
   const month = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
-  const weekdays = ['일', '월', '화', '수', '목', '금', '토']
-  const weekday = weekdays[d.getDay()]
+  const weekday = DAY_OF_WEEK[d.getDay()]
   return `${year}.${month}.${day} (${weekday})`
 }
 
@@ -1294,5 +1322,29 @@ onMounted(() => {
 
 .gap-3 {
   gap: 12px;
+}
+
+/* 결과 입력 유도 배너 */
+.result-prompt-alert {
+  border-radius: 12px;
+}
+
+.result-prompt-content {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 600px) {
+  .result-prompt-content {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .result-prompt-content .v-btn {
+    margin-top: 0 !important;
+    flex-shrink: 0;
+  }
 }
 </style>
