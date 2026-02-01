@@ -910,6 +910,18 @@ async def update_session(
         session.start_datetime = start_datetime_utc
         session.end_datetime = end_datetime_utc
 
+    # 시즌 연결 변경
+    if session_data.season_id is not None:
+        # 시즌 검증
+        season = await Season.get_or_none(id=session_data.season_id, club_id=club_id, is_deleted=False)
+        if not season:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="시즌을 찾을 수 없습니다"
+            )
+        session.season = season
+    # season_id가 명시적으로 전달되지 않았으면 기존 값 유지 (None이 아닌 경우에만 처리)
+
     await session.save()
 
     return {

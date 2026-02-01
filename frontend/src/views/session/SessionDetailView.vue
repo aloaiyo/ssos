@@ -28,6 +28,14 @@
                 <v-icon size="16">mdi-map-marker</v-icon>
                 {{ session.location }}
               </span>
+              <span v-if="session.season_name" class="meta-item">
+                <v-icon size="16">mdi-trophy</v-icon>
+                {{ session.season_name }}
+              </span>
+              <span v-else class="meta-item text-warning">
+                <v-icon size="16" color="warning">mdi-alert</v-icon>
+                시즌 미연결
+              </span>
             </div>
           </div>
           <v-btn icon variant="text" @click="showEditDialog = true">
@@ -297,6 +305,16 @@
               item-title="label"
               item-value="value"
             ></v-select>
+
+            <v-select
+              v-model="editForm.season_id"
+              label="시즌"
+              :items="seasonOptions"
+              item-title="name"
+              item-value="id"
+              hint="세션을 시즌에 연결하면 시즌 랭킹에 반영됩니다"
+              persistent-hint
+            ></v-select>
           </v-form>
         </v-card-text>
         <v-card-actions>
@@ -536,6 +554,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useClubStore } from '@/stores/club'
 import sessionsApi from '@/api/sessions'
+import seasonsApi from '@/api/seasons'
 import clubsApi from '@/api/clubs'
 import {
   getSessionTypeColor,
@@ -582,6 +601,7 @@ const participants = ref([])
 const matches = ref([])
 const clubMembers = ref([])
 const myParticipation = ref(null)
+const seasons = ref([])  // 시즌 목록
 
 const activeTab = ref('participants')
 const isGenerating = ref(false)
@@ -625,7 +645,13 @@ const editForm = ref({
   start_time: '09:00',
   end_time: '12:00',
   location: '',
-  session_type: 'league'
+  session_type: 'league',
+  season_id: null
+})
+
+// 시즌 옵션 (시즌 없음 + 시즌 목록)
+const seasonOptions = computed(() => {
+  return [{ id: null, name: '시즌 없음' }, ...seasons.value]
 })
 
 // 시간 옵션 (06:00 ~ 22:00)
@@ -764,14 +790,16 @@ async function loadSession() {
       start_time: session.value.start_time?.slice(0, 5) || '09:00',
       end_time: session.value.end_time?.slice(0, 5) || '12:00',
       location: session.value.location || '',
-      session_type: session.value.session_type || 'league'
+      session_type: session.value.session_type || 'league',
+      season_id: session.value.season_id || null
     }
 
     await Promise.all([
       loadParticipants(),
       loadMatches(),
       loadClubMembers(),
-      loadMyParticipation()
+      loadMyParticipation(),
+      loadSeasons()
     ])
   } catch (error) {
     console.error('세션 조회 실패:', error)
@@ -810,6 +838,17 @@ async function loadClubMembers() {
   } catch (error) {
     console.error('회원 목록 조회 실패:', error)
     clubMembers.value = []
+  }
+}
+
+async function loadSeasons() {
+  if (!selectedClub.value?.id) return
+  try {
+    const response = await seasonsApi.getSeasons(selectedClub.value.id)
+    seasons.value = Array.isArray(response.data) ? response.data : []
+  } catch (error) {
+    console.error('시즌 목록 조회 실패:', error)
+    seasons.value = []
   }
 }
 
@@ -863,7 +902,8 @@ async function saveSession() {
       start_time: editForm.value.start_time + ':00',
       end_time: editForm.value.end_time + ':00',
       location: editForm.value.location,
-      session_type: editForm.value.session_type
+      session_type: editForm.value.session_type,
+      season_id: editForm.value.season_id
     })
     // 로컬 상태 업데이트
     session.value = {
@@ -873,7 +913,8 @@ async function saveSession() {
       start_time: editForm.value.start_time + ':00',
       end_time: editForm.value.end_time + ':00',
       location: editForm.value.location,
-      session_type: editForm.value.session_type
+      session_type: editForm.value.session_type,
+      season_id: editForm.value.season_id
     }
     showEditDialog.value = false
   } catch (error) {
