@@ -173,6 +173,35 @@ Generates fair game schedules from session participants:
 
 ## Development Patterns
 
+### Timezone Handling (UTC Storage, KST Display)
+
+**백엔드**: 모든 datetime은 UTC로 저장, KST로 응답
+```python
+from app.core.timezone import KST, to_utc, to_kst
+
+# 저장 시: KST → UTC
+start_kst = datetime.combine(date, start_time, tzinfo=KST)
+start_datetime_utc = to_utc(start_kst)
+await Session.create(start_datetime=start_datetime_utc, ...)
+
+# 조회 시: UTC → KST
+return {"date": to_kst(session.start_datetime).isoformat()}
+```
+
+**프론트엔드**: JavaScript Date의 `toISOString()`은 UTC로 변환되므로 주의!
+```javascript
+// ❌ 잘못된 방법 - UTC로 변환되어 날짜가 하루 밀릴 수 있음
+date.toISOString().split('T')[0]
+
+// ✅ 올바른 방법 - 로컬 날짜 사용
+const year = date.getFullYear()
+const month = String(date.getMonth() + 1).padStart(2, '0')
+const day = String(date.getDate()).padStart(2, '0')
+return `${year}-${month}-${day}`
+```
+
+**Session 모델**: `start_datetime`/`end_datetime` (UTC) 필드 사용, `date`/`start_time`/`end_time`은 KST 프로퍼티
+
 ### Pydantic V2 (Backend)
 ```python
 from pydantic import BaseModel, ConfigDict
@@ -284,6 +313,10 @@ function formatContent(content) {
 - **ESLint**: ESLint 9 flat config 사용 (`eslint.config.js`), 기존 `.eslintrc` 형식 사용 불가
 - **Router Order**: `/clubs/create`가 `/clubs/:id`보다 먼저 정의되어야 함 (동적 라우트 우선순위)
 - **Profile Completion**: 신규 사용자는 gender, birth_date 입력 전까지 프로필 완성 페이지로 리다이렉트됨
+- **Timezone Bug**: JavaScript `toISOString()`은 UTC로 변환하여 KST 기준 날짜가 하루 밀릴 수 있음 → 로컬 날짜 컴포넌트 사용
+- **Session Model**: `date`/`start_time`/`end_time`은 프로퍼티(KST), 실제 필드는 `start_datetime`/`end_datetime`(UTC)
+- **API Response Fields**: 응답에 필요한 모든 필드를 포함했는지 확인 (예: `get_my_clubs`에 동호회 설정값 포함 필요)
+- **Error Handling Pattern**: 프론트엔드에서 `error.response?.data?.detail || '기본 메시지'` 패턴 사용
 
 ## API Documentation
 
