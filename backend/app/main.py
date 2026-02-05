@@ -1,6 +1,12 @@
 """
 FastAPI 애플리케이션 엔트리포인트
 """
+import logging
+
+# 로깅 설정 - app 모듈의 로거를 INFO 레벨로 설정
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("app").setLevel(logging.INFO)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from tortoise.contrib.fastapi import register_tortoise
