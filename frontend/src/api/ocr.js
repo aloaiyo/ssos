@@ -14,7 +14,8 @@ export default {
     return apiClient.post(`/clubs/${clubId}/ocr/extract`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
-      }
+      },
+      timeout: 120000  // Gemini OCR 처리 시간 고려하여 120초
     })
   },
 
