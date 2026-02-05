@@ -706,7 +706,18 @@ function clearFile() {
 }
 
 async function extractResults() {
-  if (!selectedClub.value?.id || !selectedFile.value) return
+  if (!selectedClub.value?.id) {
+    snackbarMessage.value = '동호회를 먼저 선택해주세요'
+    snackbarColor.value = 'error'
+    showSnackbar.value = true
+    return
+  }
+  if (!selectedFile.value) {
+    snackbarMessage.value = '이미지를 먼저 업로드해주세요'
+    snackbarColor.value = 'error'
+    showSnackbar.value = true
+    return
+  }
 
   isExtracting.value = true
   try {
@@ -723,8 +734,7 @@ async function extractResults() {
 
     currentStep.value = 2
   } catch (error) {
-    console.error('OCR 추출 실패:', error)
-    snackbarMessage.value = error.response?.data?.detail || '이미지 분석에 실패했습니다'
+    snackbarMessage.value = error.response?.data?.detail || '이미지 분석에 실패했습니다. 다시 시도해주세요.'
     snackbarColor.value = 'error'
     showSnackbar.value = true
   } finally {
