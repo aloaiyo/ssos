@@ -85,12 +85,15 @@ async def extract_match_results(
     - 이미지 파일을 업로드하면 Gemini AI가 경기 결과를 추출합니다.
     - 지원 형식: JPEG, PNG, GIF, WebP
     """
+    logger.info(f"[OCR] 요청 시작 - club_id={club_id}, filename={file.filename}, content_type={file.content_type}")
+
     # 클럽 확인
     await get_club_or_404(club_id)
 
     # 파일 타입 확인
     allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
     if file.content_type not in allowed_types:
+        logger.warning(f"[OCR] 지원하지 않는 파일 형식: {file.content_type}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"지원하지 않는 파일 형식입니다. 지원 형식: {', '.join(allowed_types)}"
@@ -98,22 +101,30 @@ async def extract_match_results(
 
     # 파일 크기 확인 (10MB 제한)
     contents = await file.read()
+    file_size_mb = len(contents) / (1024 * 1024)
+    logger.info(f"[OCR] 파일 읽기 완료 - 크기: {file_size_mb:.2f}MB")
+
     if len(contents) > 10 * 1024 * 1024:
+        logger.warning(f"[OCR] 파일 크기 초과: {file_size_mb:.2f}MB")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="파일 크기가 10MB를 초과합니다"
         )
 
     try:
+        logger.info(f"[OCR] Gemini API 호출 시작...")
         result = await ocr_service.extract_match_results(contents, file.content_type)
+        match_count = len(result.get("matches", []))
+        logger.info(f"[OCR] 추출 완료 - {match_count}개 매치 추출됨")
         return OCRResult(**result)
     except ValueError as e:
+        logger.error(f"[OCR] 값 오류: {e}")
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e)
         )
     except Exception as e:
-        logger.error(f"OCR 처리 오류: {e}")
+        logger.error(f"[OCR] 처리 오류: {type(e).__name__}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="이미지 처리 중 오류가 발생했습니다"

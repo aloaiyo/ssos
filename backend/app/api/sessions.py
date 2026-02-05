@@ -1277,6 +1277,107 @@ async def confirm_ai_matches(
     }
 
 
+class BulkParticipantsAdd(PydanticBase):
+    """참가자 일괄 추가 요청"""
+    member_ids: List[int]
+
+
+class BulkScoreItem(PydanticBase):
+    """점수 일괄 입력 항목"""
+    match_id: int
+    team_a_score: int
+    team_b_score: int
+
+
+class BulkScoresUpdate(PydanticBase):
+    """점수 일괄 입력 요청"""
+    scores: List[BulkScoreItem]
+
+
+@router.post("/{session_id}/participants/bulk")
+async def add_participants_bulk(
+    club_id: int,
+    session_id: int,
+    data: BulkParticipantsAdd,
+    membership: ClubMember = Depends(require_club_manager)
+):
+    """참가자 일괄 추가"""
+    session = await get_session_or_404(session_id, club_id)
+
+    added = 0
+    skipped = 0
+    for member_id in data.member_ids:
+        member = await ClubMember.get_or_none(id=member_id, club_id=club_id, is_deleted=False)
+        if not member:
+            skipped += 1
+            continue
+
+        existing = await SessionParticipant.get_or_none(session=session, club_member=member)
+        if existing:
+            skipped += 1
+            continue
+
+        await SessionParticipant.create(
+            session=session,
+            club_member=member,
+            participant_category=ParticipantCategory.MEMBER
+        )
+        added += 1
+
+    return {"added": added, "skipped": skipped}
+
+
+@router.put("/{session_id}/matches/bulk-scores")
+async def update_matches_bulk_scores(
+    club_id: int,
+    session_id: int,
+    data: BulkScoresUpdate,
+    membership: ClubMember = Depends(require_club_manager)
+):
+    """점수 일괄 입력"""
+    await get_session_or_404(session_id, club_id)
+    user = await membership.user
+
+    updated = 0
+    for item in data.scores:
+        if item.team_a_score < 0 or item.team_b_score < 0:
+            continue
+
+        match = await Match.get_or_none(id=item.match_id, session_id=session_id)
+        if not match:
+            continue
+
+        # 승자 결정
+        winner = None
+        if item.team_a_score > item.team_b_score:
+            winner = Team.A
+        elif item.team_b_score > item.team_a_score:
+            winner = Team.B
+
+        # 결과 생성 또는 업데이트
+        result = await MatchResult.get_or_none(match=match)
+        if result:
+            result.team_a_score = item.team_a_score
+            result.team_b_score = item.team_b_score
+            result.winner_team = winner
+            await result.save()
+        else:
+            await MatchResult.create(
+                match=match,
+                team_a_score=item.team_a_score,
+                team_b_score=item.team_b_score,
+                sets_detail={},
+                winner_team=winner,
+                recorded_by=user
+            )
+
+        match.status = MatchStatus.COMPLETED
+        await match.save()
+        updated += 1
+
+    return {"updated": updated}
+
+
 class ScheduleCalculateRequest(PydanticBase):
     """스케줄 계산 요청"""
     start_time: time  # 시작 시간 (KST)

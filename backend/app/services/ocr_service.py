@@ -20,10 +20,12 @@ def _get_client():
     if _client is None:
         from app.config import settings
         if not settings.GEMINI_API_KEY:
+            logger.error("[OCR] GEMINI_API_KEY가 설정되지 않았습니다")
             raise ValueError("GEMINI_API_KEY가 설정되지 않았습니다")
 
         from google import genai
         _client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        logger.info("[OCR] Gemini 클라이언트 초기화 완료")
     return _client
 
 
@@ -82,8 +84,13 @@ class OCRService:
 JSON만 반환하고 다른 텍스트는 포함하지 마세요.
 """
 
+        import time as time_module
+
         result_text = ""
         try:
+            logger.info(f"[OCR] Gemini API 요청 - model=gemini-2.5-flash, mime_type={mime_type}, image_size={len(image_data)}bytes")
+            start_time = time_module.time()
+
             # google-genai SDK 사용 (최신 API 문서 기반)
             # https://ai.google.dev/gemini-api/docs/image-understanding
             response = client.models.generate_content(
@@ -94,8 +101,13 @@ JSON만 반환하고 다른 텍스트는 포함하지 마세요.
                 ]
             )
 
+            elapsed = time_module.time() - start_time
+            logger.info(f"[OCR] Gemini API 응답 수신 - {elapsed:.1f}초 소요")
+
             # 응답에서 JSON 추출
             result_text = response.text.strip()
+            logger.info(f"[OCR] Gemini 응답 길이: {len(result_text)}자")
+            logger.debug(f"[OCR] Gemini 원본 응답: {result_text[:500]}")
 
             # JSON 블록 추출 (```json ... ``` 형식 처리)
             if "```json" in result_text:
@@ -105,15 +117,20 @@ JSON만 반환하고 다른 텍스트는 포함하지 마세요.
 
             # JSON 파싱
             result = json.loads(result_text)
+            match_count = len(result.get("matches", []))
+            logger.info(f"[OCR] JSON 파싱 성공 - {match_count}개 매치, 날짜={result.get('date')}, 장소={result.get('location')}")
 
             # 결과 검증 및 정규화
-            return self._normalize_results(result)
+            normalized = self._normalize_results(result)
+            logger.info(f"[OCR] 정규화 완료 - 최종 {len(normalized.get('matches', []))}개 매치")
+            return normalized
 
         except json.JSONDecodeError as e:
-            logger.error(f"JSON 파싱 실패: {e}, 원본: {result_text}")
+            logger.error(f"[OCR] JSON 파싱 실패: {e}")
+            logger.error(f"[OCR] 파싱 실패 원본: {result_text[:1000]}")
             raise ValueError(f"결과 파싱 실패: {str(e)}")
         except Exception as e:
-            logger.error(f"OCR 처리 실패: {e}")
+            logger.error(f"[OCR] 처리 실패: {type(e).__name__}: {e}", exc_info=True)
             raise ValueError(f"이미지 분석 실패: {str(e)}")
 
     def _normalize_results(self, result: Dict[str, Any]) -> Dict[str, Any]:

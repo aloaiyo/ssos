@@ -57,11 +57,17 @@
         </div>
       </v-card>
 
-      <div class="step-actions">
+      <!-- OCR 추출 중 오버레이 -->
+      <div v-if="isExtracting" class="extracting-overlay">
+        <v-progress-circular indeterminate color="primary" size="64" width="5" />
+        <p class="extracting-text mt-4">AI가 결과를 분석 중입니다...</p>
+        <p class="extracting-hint">이미지에서 경기 결과를 추출하고 있습니다. 잠시만 기다려주세요.</p>
+      </div>
+
+      <div v-else class="step-actions">
         <v-btn
           color="primary"
           size="large"
-          :loading="isExtracting"
           :disabled="!selectedFile"
           @click="extractResults"
         >
@@ -1141,6 +1147,27 @@ onMounted(() => {
 .file-name {
   font-size: 0.9rem;
   color: #64748B;
+}
+
+.extracting-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.extracting-text {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1E293B;
+}
+
+.extracting-hint {
+  font-size: 0.85rem;
+  color: #94A3B8;
+  margin-top: 8px;
 }
 
 .step-actions {

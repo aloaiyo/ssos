@@ -126,14 +126,29 @@
       </v-card-text>
     </v-card>
 
-    <!-- 세션 생성 다이얼로그 -->
-    <v-dialog v-model="showCreateDialog" max-width="500" persistent>
+    <!-- 세션 생성 다이얼로그 (과거 날짜: 4단계 스테퍼) -->
+    <v-dialog v-model="showCreateDialog" :max-width="dialogMaxWidth" persistent>
       <v-card>
         <v-card-title class="d-flex align-center">
           <v-icon class="mr-2">mdi-calendar-plus</v-icon>
           새 세션 만들기
         </v-card-title>
-        <v-card-text>
+
+        <!-- 과거 날짜인 경우 스테퍼 헤더 -->
+        <v-stepper v-if="isPastDate" v-model="currentStep" alt-labels class="stepper elevation-0">
+          <v-stepper-header>
+            <v-stepper-item :value="1" title="세션 정보" :complete="currentStep > 1" />
+            <v-divider />
+            <v-stepper-item :value="2" title="참가자" :complete="currentStep > 2" />
+            <v-divider />
+            <v-stepper-item :value="3" title="매치 생성" :complete="currentStep > 3" />
+            <v-divider />
+            <v-stepper-item :value="4" title="점수 입력" :complete="currentStep > 4" />
+          </v-stepper-header>
+        </v-stepper>
+
+        <!-- Step 1: 세션 기본 정보 -->
+        <v-card-text v-if="currentStep === 1">
           <v-form ref="createForm" v-model="formValid">
             <v-row>
               <v-col cols="12">
@@ -235,10 +250,180 @@
             </v-row>
           </v-form>
         </v-card-text>
+
+        <!-- Step 2: 참가자 선택 (과거 세션만) -->
+        <v-card-text v-if="currentStep === 2">
+          <div class="d-flex align-center justify-space-between mb-3">
+            <div class="d-flex align-center gap-2">
+              <v-btn-toggle v-model="participantGenderFilter" density="compact" variant="outlined" divided>
+                <v-btn value="all" size="small">전체</v-btn>
+                <v-btn value="male" size="small">남</v-btn>
+                <v-btn value="female" size="small">여</v-btn>
+              </v-btn-toggle>
+            </div>
+            <v-chip size="small" color="primary" variant="tonal">
+              남 {{ selectedMaleCount }}명, 여 {{ selectedFemaleCount }}명
+            </v-chip>
+          </div>
+          <v-list density="compact" class="member-select-list" style="max-height: 350px; overflow-y: auto;">
+            <v-list-item
+              v-for="member in filteredClubMembers"
+              :key="member.id"
+              @click="toggleMemberSelection(member.id)"
+              class="member-select-item"
+            >
+              <template v-slot:prepend>
+                <v-checkbox
+                  :model-value="selectedMemberIds.includes(member.id)"
+                  hide-details
+                  density="compact"
+                  class="mr-2"
+                  @click.stop
+                />
+              </template>
+              <v-list-item-title>{{ member.user_name || '알 수 없음' }}</v-list-item-title>
+              <v-list-item-subtitle>
+                <v-chip size="x-small" :color="member.gender === 'male' ? 'blue' : 'pink'" variant="tonal">
+                  {{ member.gender === 'male' ? '남' : '여' }}
+                </v-chip>
+              </v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+          <p v-if="filteredClubMembers.length === 0" class="text-grey text-center py-4">
+            회원이 없습니다
+          </p>
+        </v-card-text>
+
+        <!-- Step 3: 매치 생성 (과거 세션만) -->
+        <v-card-text v-if="currentStep === 3">
+          <div v-if="!generatedMatches.length && !isGeneratingStep">
+            <p class="text-body-2 text-grey mb-4">매치 생성 방식을 선택하세요.</p>
+            <div class="d-flex flex-column gap-3">
+              <v-btn
+                color="primary"
+                variant="flat"
+                prepend-icon="mdi-shuffle-variant"
+                :loading="isGeneratingStep"
+                @click="generateMatchesStep('auto')"
+              >
+                자동 생성
+              </v-btn>
+              <v-btn
+                color="secondary"
+                variant="flat"
+                prepend-icon="mdi-robot"
+                :loading="isGeneratingStep"
+                @click="generateMatchesStep('ai')"
+              >
+                AI 생성
+              </v-btn>
+            </div>
+          </div>
+
+          <!-- AI 생성 설정 -->
+          <div v-if="showAISettingsStep">
+            <v-radio-group v-model="aiModeStep" label="매칭 방식" class="mb-4">
+              <v-radio value="balanced">
+                <template v-slot:label>
+                  <div>
+                    <strong>실력 균형</strong>
+                    <p class="text-grey text-caption">랭킹/승률 기반으로 팀 밸런스 조정</p>
+                  </div>
+                </template>
+              </v-radio>
+              <v-radio value="random">
+                <template v-slot:label>
+                  <div>
+                    <strong>완전 랜덤</strong>
+                    <p class="text-grey text-caption">무작위로 팀 구성</p>
+                  </div>
+                </template>
+              </v-radio>
+            </v-radio-group>
+            <v-btn color="primary" variant="flat" :loading="isGeneratingStep" @click="executeAIGenerate">
+              <v-icon start>mdi-creation</v-icon>
+              생성하기
+            </v-btn>
+          </div>
+
+          <!-- 매치 미리보기 -->
+          <div v-if="generatedMatches.length > 0">
+            <div class="d-flex align-center justify-space-between mb-3">
+              <v-chip size="small" color="success" variant="tonal">
+                {{ generatedMatches.length }}개 매치 생성됨
+              </v-chip>
+              <v-btn size="small" variant="text" prepend-icon="mdi-refresh" @click="resetGeneratedMatches">
+                다시 생성
+              </v-btn>
+            </div>
+            <div class="match-preview-list">
+              <div v-for="(match, index) in generatedMatches" :key="index" class="match-preview-card">
+                <v-chip size="x-small" :color="getMatchTypeColor(match.match_type)" variant="tonal" class="mb-1">
+                  {{ getMatchTypeLabel(match.match_type) }}
+                </v-chip>
+                <div class="match-preview-teams">
+                  <span class="team-name">{{ getMatchTeamNames(match, 'A') }}</span>
+                  <span class="vs-label">vs</span>
+                  <span class="team-name">{{ getMatchTeamNames(match, 'B') }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <v-alert v-if="stepError" type="error" density="compact" class="mt-3">
+            {{ stepError }}
+          </v-alert>
+        </v-card-text>
+
+        <!-- Step 4: 점수 일괄 입력 (과거 세션만) -->
+        <v-card-text v-if="currentStep === 4">
+          <p class="text-body-2 text-grey mb-3">각 매치의 점수를 입력하세요. 미입력 매치는 건너뜁니다.</p>
+          <div class="score-bulk-list">
+            <div v-for="(match, index) in generatedMatches" :key="index" class="score-bulk-item">
+              <div class="score-bulk-match-info">
+                <v-chip size="x-small" :color="getMatchTypeColor(match.match_type)" variant="tonal">
+                  {{ getMatchTypeLabel(match.match_type) }}
+                </v-chip>
+                <span class="text-caption text-grey ml-1">{{ getMatchTeamNames(match, 'A') }} vs {{ getMatchTeamNames(match, 'B') }}</span>
+              </div>
+              <div class="score-bulk-inputs">
+                <v-text-field
+                  v-model.number="matchScores[match.id || index].team_a_score"
+                  type="number"
+                  min="0"
+                  variant="outlined"
+                  density="compact"
+                  class="score-input-small"
+                  placeholder="-"
+                  hide-details
+                />
+                <span class="score-colon">:</span>
+                <v-text-field
+                  v-model.number="matchScores[match.id || index].team_b_score"
+                  type="number"
+                  min="0"
+                  variant="outlined"
+                  density="compact"
+                  class="score-input-small"
+                  placeholder="-"
+                  hide-details
+                />
+              </div>
+            </div>
+          </div>
+        </v-card-text>
+
+        <!-- 액션 버튼 -->
         <v-card-actions>
+          <v-btn v-if="currentStep > 1 && isPastDate" variant="text" @click="skipStep">
+            건너뛰기
+          </v-btn>
           <v-spacer />
           <v-btn variant="text" @click="closeCreateDialog">취소</v-btn>
+
+          <!-- Step 1: 미래 → 생성, 과거 → 다음 -->
           <v-btn
+            v-if="currentStep === 1 && !isPastDate"
             color="primary"
             variant="flat"
             :loading="isSaving"
@@ -246,6 +431,50 @@
             @click="createSession"
           >
             생성
+          </v-btn>
+          <v-btn
+            v-if="currentStep === 1 && isPastDate"
+            color="primary"
+            variant="flat"
+            :loading="isSaving"
+            :disabled="!formValid"
+            @click="createSessionAndNext"
+          >
+            다음
+          </v-btn>
+
+          <!-- Step 2: 참가자 추가 후 다음 -->
+          <v-btn
+            v-if="currentStep === 2"
+            color="primary"
+            variant="flat"
+            :loading="isSaving"
+            :disabled="selectedMemberIds.length === 0"
+            @click="addParticipantsAndNext"
+          >
+            다음 ({{ selectedMemberIds.length }}명)
+          </v-btn>
+
+          <!-- Step 3: 매치 확정 후 다음 -->
+          <v-btn
+            v-if="currentStep === 3"
+            color="primary"
+            variant="flat"
+            :disabled="generatedMatches.length === 0"
+            @click="confirmMatchesAndNext"
+          >
+            다음
+          </v-btn>
+
+          <!-- Step 4: 점수 저장 -->
+          <v-btn
+            v-if="currentStep === 4"
+            color="primary"
+            variant="flat"
+            :loading="isSaving"
+            @click="saveBulkScoresAndFinish"
+          >
+            완료
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -262,11 +491,15 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useClubStore } from '@/stores/club'
+import { useMemberStore } from '@/stores/member'
 import apiClient from '@/api'
+import sessionsApi from '@/api/sessions'
+import { getMatchTypeColor, getMatchTypeLabel } from '@/utils/constants'
 
 const router = useRouter()
 
 const clubStore = useClubStore()
+const memberStore = useMemberStore()
 const selectedClub = computed(() => clubStore.selectedClub)
 const isManager = computed(() => clubStore.isManagerOfSelectedClub)
 
@@ -289,6 +522,57 @@ const sessionForm = ref({
   num_courts: 4,
   match_duration_minutes: 30,
   notes: ''
+})
+
+// 스테퍼 상태
+const currentStep = ref(1)
+const createdSessionId = ref(null)
+const selectedMemberIds = ref([])
+const participantGenderFilter = ref('all')
+const generatedMatches = ref([])
+const matchScores = ref({})
+const isGeneratingStep = ref(false)
+const showAISettingsStep = ref(false)
+const aiModeStep = ref('balanced')
+const stepError = ref('')
+const generatedMatchType = ref(null) // 'auto' or 'ai'
+const aiPreviewDataStep = ref(null)
+
+// 과거 날짜 감지
+const isPastDate = computed(() => {
+  if (!sessionForm.value.date) return false
+  const selected = new Date(sessionForm.value.date)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  selected.setHours(0, 0, 0, 0)
+  return selected < today
+})
+
+// 다이얼로그 폭 동적 조절
+const dialogMaxWidth = computed(() => isPastDate.value && currentStep.value > 1 ? 800 : 500)
+
+// 클럽 회원 목록 (성별 필터 적용)
+const filteredClubMembers = computed(() => {
+  const members = memberStore.members || []
+  if (participantGenderFilter.value === 'all') return members
+  return members.filter(m => m.gender === participantGenderFilter.value)
+})
+
+// 선택된 남녀 수
+const selectedMaleCount = computed(() => {
+  const members = memberStore.members || []
+  return selectedMemberIds.value.filter(id => {
+    const m = members.find(mem => mem.id === id)
+    return m?.gender === 'male'
+  }).length
+})
+
+const selectedFemaleCount = computed(() => {
+  const members = memberStore.members || []
+  return selectedMemberIds.value.filter(id => {
+    const m = members.find(mem => mem.id === id)
+    return m?.gender === 'female'
+  }).length
 })
 
 const weekdays = ['일', '월', '화', '수', '목', '금', '토']
@@ -518,6 +802,19 @@ function openCreateDialogForDate(date) {
 function closeCreateDialog() {
   showCreateDialog.value = false
   initSessionForm(new Date())
+  // 스테퍼 상태 리셋
+  currentStep.value = 1
+  createdSessionId.value = null
+  selectedMemberIds.value = []
+  generatedMatches.value = []
+  matchScores.value = {}
+  participantGenderFilter.value = 'all'
+  isGeneratingStep.value = false
+  showAISettingsStep.value = false
+  aiModeStep.value = 'balanced'
+  stepError.value = ''
+  generatedMatchType.value = null
+  aiPreviewDataStep.value = null
 }
 
 async function createSession() {
@@ -549,6 +846,222 @@ async function createSession() {
     alert(error.response?.data?.detail || '세션 생성에 실패했습니다.')
   } finally {
     isSaving.value = false
+  }
+}
+
+// === 스테퍼 함수들 ===
+
+// Step 1 → 2: 세션 생성 후 다음 단계
+async function createSessionAndNext() {
+  if (!selectedClub.value?.id || !formValid.value) return
+
+  isSaving.value = true
+  try {
+    const matchingSeason = findSeasonForDate(sessionForm.value.date)
+    const response = await apiClient.post(`/clubs/${selectedClub.value.id}/sessions`, {
+      date: sessionForm.value.date,
+      start_time: sessionForm.value.start_time,
+      end_time: sessionForm.value.end_time,
+      location: sessionForm.value.location || null,
+      num_courts: sessionForm.value.num_courts,
+      match_duration_minutes: sessionForm.value.match_duration_minutes,
+      season_id: matchingSeason?.id || null
+    })
+    createdSessionId.value = response.data.id
+    // 회원 목록 로드
+    await memberStore.fetchMembers(selectedClub.value.id)
+    currentStep.value = 2
+  } catch (error) {
+    alert(error.response?.data?.detail || '세션 생성에 실패했습니다.')
+  } finally {
+    isSaving.value = false
+  }
+}
+
+// 회원 선택 토글
+function toggleMemberSelection(memberId) {
+  const idx = selectedMemberIds.value.indexOf(memberId)
+  if (idx >= 0) {
+    selectedMemberIds.value.splice(idx, 1)
+  } else {
+    selectedMemberIds.value.push(memberId)
+  }
+}
+
+// Step 2 → 3: 참가자 일괄 추가 후 매치 생성 단계
+async function addParticipantsAndNext() {
+  if (!selectedClub.value?.id || !createdSessionId.value) return
+
+  isSaving.value = true
+  try {
+    await sessionsApi.addParticipantsBulk(
+      selectedClub.value.id,
+      createdSessionId.value,
+      selectedMemberIds.value
+    )
+    currentStep.value = 3
+  } catch (error) {
+    alert(error.response?.data?.detail || '참가자 추가에 실패했습니다.')
+  } finally {
+    isSaving.value = false
+  }
+}
+
+// Step 3: 매치 생성 방식 선택
+async function generateMatchesStep(method) {
+  if (method === 'ai') {
+    showAISettingsStep.value = true
+    return
+  }
+
+  // 자동 생성
+  isGeneratingStep.value = true
+  stepError.value = ''
+  try {
+    await sessionsApi.generateMatches(selectedClub.value.id, createdSessionId.value)
+    // 생성된 매치 목록 조회
+    const response = await sessionsApi.getMatches(selectedClub.value.id, createdSessionId.value)
+    generatedMatches.value = response.data
+    generatedMatchType.value = 'auto'
+    initMatchScores()
+  } catch (error) {
+    stepError.value = error.response?.data?.detail || '매치 생성에 실패했습니다.'
+  } finally {
+    isGeneratingStep.value = false
+  }
+}
+
+// AI 생성 실행
+async function executeAIGenerate() {
+  isGeneratingStep.value = true
+  stepError.value = ''
+  try {
+    const response = await sessionsApi.generateAIMatches(
+      selectedClub.value.id,
+      createdSessionId.value,
+      { mode: aiModeStep.value }
+    )
+    aiPreviewDataStep.value = response.data
+    // AI 미리보기 매치를 generatedMatches에 저장
+    generatedMatches.value = response.data.matches || []
+    generatedMatchType.value = 'ai'
+    showAISettingsStep.value = false
+    initMatchScores()
+  } catch (error) {
+    stepError.value = error.response?.data?.detail || 'AI 매치 생성에 실패했습니다.'
+  } finally {
+    isGeneratingStep.value = false
+  }
+}
+
+// 매치 점수 초기화
+function initMatchScores() {
+  const scores = {}
+  generatedMatches.value.forEach((match, index) => {
+    const key = match.id || index
+    scores[key] = { team_a_score: null, team_b_score: null }
+  })
+  matchScores.value = scores
+}
+
+// 매치 미리보기 리셋
+function resetGeneratedMatches() {
+  generatedMatches.value = []
+  matchScores.value = {}
+  showAISettingsStep.value = false
+  generatedMatchType.value = null
+  aiPreviewDataStep.value = null
+  stepError.value = ''
+}
+
+// 매치 팀 이름 표시
+function getMatchTeamNames(match, team) {
+  // 자동 생성 매치 (participants 포함)
+  if (match.participants) {
+    return match.participants
+      .filter(p => p.team === team)
+      .map(p => p.member?.user?.name || p.name || '?')
+      .join(', ')
+  }
+  // AI 미리보기 매치
+  const teamData = team === 'A' ? match.team_a : match.team_b
+  if (teamData?.player_names) {
+    return teamData.player_names.join(', ')
+  }
+  return '-'
+}
+
+// Step 3 → 4: 매치 확정 후 점수 입력 단계
+async function confirmMatchesAndNext() {
+  // AI 생성인 경우 confirm API 호출 필요
+  if (generatedMatchType.value === 'ai' && aiPreviewDataStep.value) {
+    isSaving.value = true
+    try {
+      await sessionsApi.confirmAIMatches(
+        selectedClub.value.id,
+        createdSessionId.value,
+        aiPreviewDataStep.value.matches
+      )
+      // 확정 후 매치 다시 조회 (실제 match ID 획득)
+      const response = await sessionsApi.getMatches(selectedClub.value.id, createdSessionId.value)
+      generatedMatches.value = response.data
+      initMatchScores()
+    } catch (error) {
+      alert(error.response?.data?.detail || '매치 확정에 실패했습니다.')
+      isSaving.value = false
+      return
+    } finally {
+      isSaving.value = false
+    }
+  }
+  currentStep.value = 4
+}
+
+// Step 4: 점수 일괄 저장
+async function saveBulkScoresAndFinish() {
+  if (!selectedClub.value?.id || !createdSessionId.value) return
+
+  const scores = []
+  for (const match of generatedMatches.value) {
+    const key = match.id
+    const score = matchScores.value[key]
+    if (score && score.team_a_score != null && score.team_b_score != null
+        && score.team_a_score >= 0 && score.team_b_score >= 0) {
+      scores.push({
+        match_id: match.id,
+        team_a_score: score.team_a_score,
+        team_b_score: score.team_b_score
+      })
+    }
+  }
+
+  isSaving.value = true
+  try {
+    if (scores.length > 0) {
+      await sessionsApi.updateMatchesBulkScores(
+        selectedClub.value.id,
+        createdSessionId.value,
+        scores
+      )
+    }
+    closeCreateDialog()
+    await loadSessions()
+    // 세션 상세로 이동
+    router.push({ name: 'session-detail', params: { sessionId: createdSessionId.value } })
+  } catch (error) {
+    alert(error.response?.data?.detail || '점수 저장에 실패했습니다.')
+  } finally {
+    isSaving.value = false
+  }
+}
+
+// 건너뛰기 공통 로직
+function skipStep() {
+  const sessionId = createdSessionId.value
+  closeCreateDialog()
+  loadSessions()
+  if (sessionId) {
+    router.push({ name: 'session-detail', params: { sessionId } })
   }
 }
 
@@ -788,6 +1301,105 @@ onMounted(() => {
   color: #1E293B;
 }
 
+/* 스테퍼 */
+.stepper {
+  background: transparent;
+}
+
+.stepper :deep(.v-stepper-header) {
+  box-shadow: none;
+}
+
+/* 참가자 선택 */
+.member-select-list {
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+}
+
+.member-select-item {
+  cursor: pointer;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.member-select-item:last-child {
+  border-bottom: none;
+}
+
+/* 매치 미리보기 */
+.match-preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.match-preview-card {
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.match-preview-teams {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.team-name {
+  flex: 1;
+  color: #1E293B;
+}
+
+.team-name:first-child {
+  text-align: right;
+}
+
+.vs-label {
+  color: #94A3B8;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+/* 점수 일괄 입력 */
+.score-bulk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.score-bulk-item {
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.score-bulk-match-info {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.score-bulk-inputs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.score-input-small {
+  max-width: 70px;
+}
+
+.score-colon {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #94A3B8;
+}
+
 @media (max-width: 600px) {
   .session-calendar-page {
     padding: 12px;
@@ -809,6 +1421,14 @@ onMounted(() => {
 
   .more-sessions {
     font-size: 0.5rem;
+  }
+
+  .stepper :deep(.v-stepper-item__title) {
+    font-size: 0.7rem;
+  }
+
+  .score-input-small {
+    max-width: 60px;
   }
 }
 </style>

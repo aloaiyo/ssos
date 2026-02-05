@@ -159,6 +159,28 @@ export default {
   },
 
   /**
+   * 참가자 일괄 추가
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @param {Array<number>} memberIds - 회원 ID 목록
+   * @returns {Promise} { added, skipped }
+   */
+  addParticipantsBulk(clubId, sessionId, memberIds) {
+    return apiClient.post(`/clubs/${clubId}/sessions/${sessionId}/participants/bulk`, { member_ids: memberIds })
+  },
+
+  /**
+   * 점수 일괄 입력
+   * @param {number} clubId - 동호회 ID
+   * @param {number} sessionId - 세션 ID
+   * @param {Array<Object>} scores - [{ match_id, team_a_score, team_b_score }]
+   * @returns {Promise} { updated }
+   */
+  updateMatchesBulkScores(clubId, sessionId, scores) {
+    return apiClient.put(`/clubs/${clubId}/sessions/${sessionId}/matches/bulk-scores`, { scores })
+  },
+
+  /**
    * AI 생성 경기 확정
    * @param {number} clubId - 동호회 ID
    * @param {number} sessionId - 세션 ID
