@@ -38,7 +38,9 @@ class Settings(BaseSettings):
     # JWT 설정
     SECRET_KEY: str = "your-secret-key-change-this-in-production"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_HOURS: int = 24       # 액세스 토큰 24시간
+    ACCESS_TOKEN_EXPIRE_HOURS: int = 24       # 액세스 토큰 24시간 (구: ACCESS_TOKEN_EXPIRE_DAYS)
+    # 하위 호환: 기존 .env에 ACCESS_TOKEN_EXPIRE_DAYS가 설정되어 있으면 변환하여 사용
+    ACCESS_TOKEN_EXPIRE_DAYS: Optional[int] = None
     REFRESH_TOKEN_EXPIRE_DAYS: int = 365     # 리프레시 토큰 365일
 
     # 쿠키 설정
@@ -74,6 +76,15 @@ class Settings(BaseSettings):
         if self.SECRET_KEY == "your-secret-key-change-this-in-production":
             _logger.warning(
                 "SECRET_KEY가 기본값입니다. 프로덕션에서는 반드시 변경하세요!"
+            )
+
+        # 하위 호환: ACCESS_TOKEN_EXPIRE_DAYS → ACCESS_TOKEN_EXPIRE_HOURS 변환
+        if self.ACCESS_TOKEN_EXPIRE_DAYS is not None:
+            self.ACCESS_TOKEN_EXPIRE_HOURS = self.ACCESS_TOKEN_EXPIRE_DAYS * 24
+            _logger.warning(
+                "ACCESS_TOKEN_EXPIRE_DAYS는 deprecated입니다. "
+                "ACCESS_TOKEN_EXPIRE_HOURS를 사용하세요. "
+                f"({self.ACCESS_TOKEN_EXPIRE_DAYS}일 → {self.ACCESS_TOKEN_EXPIRE_HOURS}시간으로 변환)"
             )
 
         if self.USE_AWS_SSM:

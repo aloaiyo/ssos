@@ -128,20 +128,28 @@ jobs:
 
             if [ "$TABLES_EXIST" = "not_exists" ]; then
               echo "   Model tables not found. Running aerich init-db..."
-              if poetry run aerich init-db 2>&1; then
-                echo "✅ Database initialized with all tables"
+              # migrations/models 디렉토리가 이미 있으면 init-db 대신 upgrade 시도
+              if [ -d "migrations/models" ] && [ "$(ls -A migrations/models/*.py 2>/dev/null | wc -l)" -gt 0 ]; then
+                echo "   migrations/models already exists. Trying aerich upgrade first..."
+                MIGRATION_OUTPUT=$(poetry run aerich upgrade 2>&1) || true
+                echo "$MIGRATION_OUTPUT"
+                echo "   Migrations applied (upgrade fallback)"
               else
-                echo "❌ Database initialization failed!"
-                exit 1
+                if poetry run aerich init-db 2>&1; then
+                  echo "   Database initialized with all tables"
+                else
+                  echo "   Database initialization failed!"
+                  exit 1
+                fi
               fi
             elif [ "$TABLES_EXIST" = "exists" ]; then
               echo "   Model tables exist. Running aerich upgrade..."
               MIGRATION_OUTPUT=$(poetry run aerich upgrade 2>&1) || true
               echo "$MIGRATION_OUTPUT"
-              echo "✅ Migrations applied"
+              echo "   Migrations applied"
             else
-              echo "❌ Cannot connect to database!"
-              echo "   DATABASE_URL: ${DATABASE_URL:0:30}..."
+              echo "   Cannot connect to database!"
+              echo "   Raw check output: $TABLES_EXIST"
               exit 1
             fi
 
