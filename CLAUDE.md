@@ -329,6 +329,47 @@ Key endpoints:
 - `POST /api/clubs/{club_id}/sessions/{id}/matches/generate` - Auto-generate matches
 - `GET /api/clubs/{id}/seasons` - List seasons for a club
 
+## 하네스: SSOS 개발 에이전트 팀
+
+**목표:** 백엔드(FastAPI) + 프론트엔드(Vue 3) 풀스택 개발을 에이전트 팀으로 조율하고, 경계면 버그(타임존·CORS·필드 불일치)를 자동 검증한다.
+
+**에이전트 팀:**
+| 에이전트 | 역할 |
+|---------|------|
+| `backend-dev` | FastAPI/Tortoise-ORM 백엔드 — API, 서비스, DB 모델 |
+| `frontend-dev` | Vue 3/Vuetify 프론트엔드 — 뷰, 스토어, API 연동 |
+| `reviewer` | API↔Frontend 경계면 정합성 검증 (타임존·CORS·테넌트 격리) |
+
+**스킬:**
+| 스킬 | 용도 | 사용 에이전트 |
+|------|------|-------------|
+| `ssos` | 개발 오케스트레이터 (기능 개발·버그 수정·풀스택 조율) | 전체 팀 |
+
+**실행 규칙:**
+- 기능 추가, 버그 수정, API/UI 변경 요청 시 `ssos` 스킬을 통해 에이전트 팀으로 처리하라
+- 단순 질문, 코드 설명, 단일 파일 소규모 수정은 에이전트 팀 없이 직접 처리해도 무방
+- 모든 에이전트는 `model: "opus"` 사용
+- 중간 산출물: `_workspace/` 디렉토리
+
+**디렉토리 구조:**
+```
+.claude/
+├── agents/
+│   ├── backend-dev.md
+│   ├── frontend-dev.md
+│   └── reviewer.md
+└── skills/
+    └── ssos/
+        ├── SKILL.md
+        └── references/
+            └── domain-gotchas.md
+```
+
+**변경 이력:**
+| 날짜 | 변경 내용 | 대상 | 사유 |
+|------|----------|------|------|
+| 2026-04-07 | 초기 구성 | 전체 | 신규 하네스 구축 |
+
 ## Detailed Documentation
 
 상세 문서는 `claudedocs/` 디렉토리를 참조하세요:
