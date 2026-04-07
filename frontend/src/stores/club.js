@@ -3,9 +3,13 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import clubsApi from '@/api/clubs'
 
+/** @typedef {import('@/types/api').Club} Club */
+
 export const useClubStore = defineStore('club', () => {
   // State
+  /** @type {import('vue').Ref<Club[]>} */
   const clubs = ref([])
+  /** @type {import('vue').Ref<Club|null>} */
   const currentClub = ref(null)
   const selectedClubId = ref(localStorage.getItem('selectedClubId'))
   const isLoading = ref(false)
@@ -15,7 +19,7 @@ export const useClubStore = defineStore('club', () => {
   // Getters
   const selectedClub = computed(() => {
     if (!selectedClubId.value) return null
-    return clubs.value.find(club => club.id === parseInt(selectedClubId.value))
+    return clubs.value.find(club => club.id === parseInt(selectedClubId.value, 10))
   })
 
   // 선택된 동호회에서 매니저인지 확인
@@ -196,6 +200,13 @@ export const useClubStore = defineStore('club', () => {
     localStorage.setItem('isAdminMode', value.toString())
   }
 
+  /**
+   * 에러 초기화
+   */
+  function clearError() {
+    error.value = null
+  }
+
   return {
     // State
     clubs,
@@ -218,5 +229,6 @@ export const useClubStore = defineStore('club', () => {
     joinClub,
     toggleAdminMode,
     setAdminMode,
+    clearError,
   }
 })

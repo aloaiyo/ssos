@@ -22,28 +22,31 @@
     <!-- 캘린더 네비게이션 -->
     <v-card class="calendar-card" variant="flat">
       <div class="calendar-nav">
-        <v-btn icon variant="text" @click="prevMonth">
+        <v-btn icon variant="text" @click="prevMonth" aria-label="이전 달">
           <v-icon>mdi-chevron-left</v-icon>
         </v-btn>
         <h2 class="calendar-title">{{ currentYear }}년 {{ currentMonth }}월</h2>
-        <v-btn icon variant="text" @click="nextMonth">
+        <v-btn icon variant="text" @click="nextMonth" aria-label="다음 달">
           <v-icon>mdi-chevron-right</v-icon>
         </v-btn>
       </div>
 
       <!-- 요일 헤더 -->
-      <div class="calendar-weekdays">
-        <div v-for="day in weekdays" :key="day" class="weekday" :class="{ sunday: day === '일', saturday: day === '토' }">
+      <div class="calendar-weekdays" role="row">
+        <div v-for="day in weekdays" :key="day" class="weekday" role="columnheader" :class="{ sunday: day === '일', saturday: day === '토' }">
           {{ day }}
         </div>
       </div>
 
       <!-- 캘린더 그리드 -->
-      <div class="calendar-grid">
+      <div class="calendar-grid" role="grid" aria-label="세션 캘린더">
         <div
           v-for="(day, index) in calendarDays"
           :key="index"
           class="calendar-day"
+          role="gridcell"
+          tabindex="0"
+          :aria-label="`${day.date.getMonth() + 1}월 ${day.date.getDate()}일${day.sessions.length > 0 ? ', ' + day.sessions.length + '개 세션' : ''}`"
           :class="{
             'other-month': !day.isCurrentMonth,
             'today': day.isToday,
@@ -52,6 +55,7 @@
             'saturday': index % 7 === 6
           }"
           @click="selectDay(day)"
+          @keydown.enter="selectDay(day)"
         >
           <span class="day-number">{{ day.date.getDate() }}</span>
           <div v-if="day.sessions.length > 0" class="session-times">
@@ -127,7 +131,7 @@
     </v-card>
 
     <!-- 세션 생성 다이얼로그 (과거 날짜: 4단계 스테퍼) -->
-    <v-dialog v-model="showCreateDialog" :max-width="dialogMaxWidth" persistent>
+    <v-dialog v-model="showCreateDialog" :max-width="dialogMaxWidth" :fullscreen="mobile" persistent>
       <v-card>
         <v-card-title class="d-flex align-center">
           <v-icon class="mr-2">mdi-calendar-plus</v-icon>
@@ -370,7 +374,7 @@
             </div>
           </div>
 
-          <v-alert v-if="stepError" type="error" density="compact" class="mt-3">
+          <v-alert v-if="stepError" type="error" density="compact" class="mt-3" role="alert">
             {{ stepError }}
           </v-alert>
         </v-card-text>
@@ -484,22 +488,33 @@
     <v-overlay v-model="isLoading" class="align-center justify-center" contained>
       <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
     </v-overlay>
+
+    <!-- 캘린더 스켈레톤 로더 -->
+    <v-skeleton-loader v-if="isLoading && sessions.length === 0" type="card, table-row@5" class="mt-4" />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useDisplay } from 'vuetify'
 import { useClubStore } from '@/stores/club'
+
+const { mobile } = useDisplay()
 import { useMemberStore } from '@/stores/member'
-import apiClient from '@/api'
-import sessionsApi from '@/api/sessions'
+import { useSessionStore } from '@/stores/session'
+import { useSeasonStore } from '@/stores/season'
 import { getMatchTypeColor, getMatchTypeLabel } from '@/utils/constants'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { showAlert } = useConfirmDialog()
 
 const router = useRouter()
 
 const clubStore = useClubStore()
 const memberStore = useMemberStore()
+const sessionStore = useSessionStore()
+const seasonStore = useSeasonStore()
 const selectedClub = computed(() => clubStore.selectedClub)
 const isManager = computed(() => clubStore.isManagerOfSelectedClub)
 
@@ -721,10 +736,10 @@ async function loadSessions() {
 
   isLoading.value = true
   try {
-    const response = await apiClient.get(`/clubs/${selectedClub.value.id}/sessions`)
-    sessions.value = response.data
-  } catch (error) {
-    console.error('세션 목록 로드 실패:', error)
+    const data = await sessionStore.fetchSessions(selectedClub.value.id)
+    sessions.value = data
+  } catch {
+    // error handled by store
   } finally {
     isLoading.value = false
   }
@@ -733,10 +748,9 @@ async function loadSessions() {
 async function loadSeasons() {
   if (!selectedClub.value?.id) return
   try {
-    const response = await apiClient.get(`/clubs/${selectedClub.value.id}/seasons`)
-    seasons.value = response.data || []
-  } catch (error) {
-    console.error('시즌 목록 로드 실패:', error)
+    await seasonStore.fetchSeasons(selectedClub.value.id)
+    seasons.value = seasonStore.seasons
+  } catch {
     seasons.value = []
   }
 }
@@ -825,7 +839,7 @@ async function createSession() {
     // 세션 날짜에 해당하는 시즌 자동 연결
     const matchingSeason = findSeasonForDate(sessionForm.value.date)
 
-    await apiClient.post(`/clubs/${selectedClub.value.id}/sessions`, {
+    await sessionStore.createSession(selectedClub.value.id, {
       date: sessionForm.value.date,
       start_time: sessionForm.value.start_time,
       end_time: sessionForm.value.end_time,
@@ -842,8 +856,7 @@ async function createSession() {
       d.date.toDateString() === createdDate.toDateString()
     )
   } catch (error) {
-    console.error('세션 생성 실패:', error)
-    alert(error.response?.data?.detail || '세션 생성에 실패했습니다.')
+    showAlert(error.response?.data?.detail || '세션 생성에 실패했습니다.')
   } finally {
     isSaving.value = false
   }
@@ -858,7 +871,7 @@ async function createSessionAndNext() {
   isSaving.value = true
   try {
     const matchingSeason = findSeasonForDate(sessionForm.value.date)
-    const response = await apiClient.post(`/clubs/${selectedClub.value.id}/sessions`, {
+    const data = await sessionStore.createSession(selectedClub.value.id, {
       date: sessionForm.value.date,
       start_time: sessionForm.value.start_time,
       end_time: sessionForm.value.end_time,
@@ -867,12 +880,12 @@ async function createSessionAndNext() {
       match_duration_minutes: sessionForm.value.match_duration_minutes,
       season_id: matchingSeason?.id || null
     })
-    createdSessionId.value = response.data.id
+    createdSessionId.value = data.id
     // 회원 목록 로드
     await memberStore.fetchMembers(selectedClub.value.id)
     currentStep.value = 2
   } catch (error) {
-    alert(error.response?.data?.detail || '세션 생성에 실패했습니다.')
+    showAlert(error.response?.data?.detail || '세션 생성에 실패했습니다.')
   } finally {
     isSaving.value = false
   }
@@ -894,14 +907,14 @@ async function addParticipantsAndNext() {
 
   isSaving.value = true
   try {
-    await sessionsApi.addParticipantsBulk(
+    await sessionStore.addParticipantsBulk(
       selectedClub.value.id,
       createdSessionId.value,
       selectedMemberIds.value
     )
     currentStep.value = 3
   } catch (error) {
-    alert(error.response?.data?.detail || '참가자 추가에 실패했습니다.')
+    showAlert(error.response?.data?.detail || '참가자 추가에 실패했습니다.')
   } finally {
     isSaving.value = false
   }
@@ -918,10 +931,9 @@ async function generateMatchesStep(method) {
   isGeneratingStep.value = true
   stepError.value = ''
   try {
-    await sessionsApi.generateMatches(selectedClub.value.id, createdSessionId.value)
+    await sessionStore.generateMatches(selectedClub.value.id, createdSessionId.value)
     // 생성된 매치 목록 조회
-    const response = await sessionsApi.getMatches(selectedClub.value.id, createdSessionId.value)
-    generatedMatches.value = response.data
+    generatedMatches.value = await sessionStore.fetchMatches(selectedClub.value.id, createdSessionId.value)
     generatedMatchType.value = 'auto'
     initMatchScores()
   } catch (error) {
@@ -936,14 +948,14 @@ async function executeAIGenerate() {
   isGeneratingStep.value = true
   stepError.value = ''
   try {
-    const response = await sessionsApi.generateAIMatches(
+    const data = await sessionStore.generateAIMatches(
       selectedClub.value.id,
       createdSessionId.value,
       { mode: aiModeStep.value }
     )
-    aiPreviewDataStep.value = response.data
+    aiPreviewDataStep.value = data
     // AI 미리보기 매치를 generatedMatches에 저장
-    generatedMatches.value = response.data.matches || []
+    generatedMatches.value = data.matches || []
     generatedMatchType.value = 'ai'
     showAISettingsStep.value = false
     initMatchScores()
@@ -997,17 +1009,16 @@ async function confirmMatchesAndNext() {
   if (generatedMatchType.value === 'ai' && aiPreviewDataStep.value) {
     isSaving.value = true
     try {
-      await sessionsApi.confirmAIMatches(
+      await sessionStore.confirmAIMatches(
         selectedClub.value.id,
         createdSessionId.value,
         aiPreviewDataStep.value.matches
       )
       // 확정 후 매치 다시 조회 (실제 match ID 획득)
-      const response = await sessionsApi.getMatches(selectedClub.value.id, createdSessionId.value)
-      generatedMatches.value = response.data
+      generatedMatches.value = await sessionStore.fetchMatches(selectedClub.value.id, createdSessionId.value)
       initMatchScores()
     } catch (error) {
-      alert(error.response?.data?.detail || '매치 확정에 실패했습니다.')
+      showAlert(error.response?.data?.detail || '매치 확정에 실패했습니다.')
       isSaving.value = false
       return
     } finally {
@@ -1038,7 +1049,7 @@ async function saveBulkScoresAndFinish() {
   isSaving.value = true
   try {
     if (scores.length > 0) {
-      await sessionsApi.updateMatchesBulkScores(
+      await sessionStore.updateMatchesBulkScores(
         selectedClub.value.id,
         createdSessionId.value,
         scores
@@ -1049,7 +1060,7 @@ async function saveBulkScoresAndFinish() {
     // 세션 상세로 이동
     router.push({ name: 'session-detail', params: { sessionId: createdSessionId.value } })
   } catch (error) {
-    alert(error.response?.data?.detail || '점수 저장에 실패했습니다.')
+    showAlert(error.response?.data?.detail || '점수 저장에 실패했습니다.')
   } finally {
     isSaving.value = false
   }
@@ -1104,11 +1115,11 @@ onMounted(() => {
 .page-title {
   font-size: 1.5rem;
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .calendar-card {
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
   border-radius: 16px;
   padding: 16px;
   margin-bottom: 20px;
@@ -1124,7 +1135,7 @@ onMounted(() => {
 .calendar-title {
   font-size: 1.25rem;
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .calendar-weekdays {
@@ -1138,7 +1149,7 @@ onMounted(() => {
   padding: 8px;
   font-size: 0.85rem;
   font-weight: 500;
-  color: #64748B;
+  color: var(--color-muted);
 }
 
 .weekday.sunday {
@@ -1168,7 +1179,7 @@ onMounted(() => {
 }
 
 .calendar-day:hover {
-  background: #F1F5F9;
+  background: var(--color-surface-hover);
 }
 
 .calendar-day.other-month {
@@ -1176,7 +1187,7 @@ onMounted(() => {
 }
 
 .calendar-day.today {
-  background: #059669;
+  background: var(--color-primary-dark);
 }
 
 .calendar-day.today .day-number {
@@ -1200,7 +1211,7 @@ onMounted(() => {
 .day-number {
   font-size: 0.9rem;
   font-weight: 500;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .session-times {
@@ -1217,8 +1228,8 @@ onMounted(() => {
   font-weight: 600;
   padding: 2px 6px;
   border-radius: 4px;
-  background: #D1FAE5;
-  color: #059669;
+  background: var(--color-success-bg);
+  color: var(--color-primary-dark);
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -1239,8 +1250,8 @@ onMounted(() => {
 }
 
 .session-time-chip.status-completed {
-  background: #D1FAE5;
-  color: #059669;
+  background: var(--color-success-bg);
+  color: var(--color-primary-dark);
 }
 
 .session-time-chip.status-cancelled {
@@ -1250,25 +1261,25 @@ onMounted(() => {
 
 .more-sessions {
   font-size: 0.6rem;
-  color: #64748B;
+  color: var(--color-muted);
   font-weight: 500;
 }
 
 .sessions-card {
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
   border-radius: 16px;
 }
 
 .sessions-title {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-dark);
   display: flex;
   align-items: center;
 }
 
 .session-item {
-  border-bottom: 1px solid #F1F5F9;
+  border-bottom: 1px solid var(--color-surface-hover);
 }
 
 .session-item:last-child {
@@ -1282,8 +1293,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #D1FAE5;
-  color: #059669;
+  background: var(--color-success-bg);
+  color: var(--color-primary-dark);
 }
 
 .session-time-badge.status-in-progress {
@@ -1292,13 +1303,13 @@ onMounted(() => {
 }
 
 .session-time-badge.status-completed {
-  background: #D1FAE5;
-  color: #059669;
+  background: var(--color-success-bg);
+  color: var(--color-primary-dark);
 }
 
 .session-item-title {
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 /* 스테퍼 */
@@ -1312,13 +1323,13 @@ onMounted(() => {
 
 /* 참가자 선택 */
 .member-select-list {
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
 }
 
 .member-select-item {
   cursor: pointer;
-  border-bottom: 1px solid #F1F5F9;
+  border-bottom: 1px solid var(--color-surface-hover);
 }
 
 .member-select-item:last-child {
@@ -1335,7 +1346,7 @@ onMounted(() => {
 }
 
 .match-preview-card {
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 10px 12px;
 }
@@ -1349,7 +1360,7 @@ onMounted(() => {
 
 .team-name {
   flex: 1;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .team-name:first-child {
@@ -1357,7 +1368,7 @@ onMounted(() => {
 }
 
 .vs-label {
-  color: #94A3B8;
+  color: var(--color-muted-light);
   font-weight: 600;
   font-size: 0.8rem;
 }
@@ -1372,7 +1383,7 @@ onMounted(() => {
 }
 
 .score-bulk-item {
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 10px 12px;
 }
@@ -1397,7 +1408,7 @@ onMounted(() => {
 .score-colon {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #94A3B8;
+  color: var(--color-muted-light);
 }
 
 @media (max-width: 600px) {

@@ -366,8 +366,8 @@ async function loadUserClubs() {
       clubStore.clubs = userClubs
 
       const savedClubId = localStorage.getItem('selectedClubId')
-      if (savedClubId && userClubs.find(c => c.id === parseInt(savedClubId))) {
-        clubStore.selectClub(parseInt(savedClubId))
+      if (savedClubId && userClubs.find(c => c.id === parseInt(savedClubId, 10))) {
+        clubStore.selectClub(parseInt(savedClubId, 10))
       } else {
         clubStore.selectClub(userClubs[0].id)
       }

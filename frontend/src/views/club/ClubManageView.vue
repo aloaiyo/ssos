@@ -102,7 +102,7 @@ const clubStore = useClubStore()
 
 const { selectedClub } = storeToRefs(clubStore)
 
-const clubId = ref(parseInt(route.params.id))
+const clubId = ref(parseInt(route.params.id, 10))
 const club = ref(null)
 const currentTab = ref('info')
 

@@ -191,12 +191,14 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useClubStore } from '@/stores/club'
-import sessionsApi from '@/api/sessions'
-import seasonsApi from '@/api/seasons'
+import { useSessionStore } from '@/stores/session'
+import { useSeasonStore } from '@/stores/season'
 import { getMatchTypeColor, getMatchTypeLabel, DAY_OF_WEEK } from '@/utils/constants'
 
 const router = useRouter()
 const clubStore = useClubStore()
+const sessionStore = useSessionStore()
+const seasonStore = useSeasonStore()
 
 const selectedClub = computed(() => clubStore.selectedClub)
 
@@ -231,10 +233,10 @@ function goBack() {
 async function loadSeasons() {
   if (!selectedClub.value?.id) return
   try {
-    const response = await seasonsApi.getSeasons(selectedClub.value.id)
-    seasons.value = response.data || []
-  } catch (error) {
-    console.error('시즌 목록 조회 실패:', error)
+    await seasonStore.fetchSeasons(selectedClub.value.id)
+    seasons.value = seasonStore.seasons
+  } catch {
+    // error handled by store
   }
 }
 
@@ -247,15 +249,13 @@ async function loadSessions() {
     if (selectedSeasonId.value) {
       params.season_id = selectedSeasonId.value
     }
-    const response = await sessionsApi.getSessions(selectedClub.value.id, params)
-    const sessionList = response.data || []
+    const sessionList = await sessionStore.fetchSessions(selectedClub.value.id, params)
 
     // 각 세션의 경기 목록 로드
     const sessionsWithMatches = await Promise.all(
-      sessionList.map(async (session) => {
+      (sessionList || []).map(async (session) => {
         try {
-          const matchResponse = await sessionsApi.getSession(selectedClub.value.id, session.id)
-          const sessionData = matchResponse.data
+          const sessionData = await sessionStore.fetchSession(selectedClub.value.id, session.id)
           return {
             ...session,
             matches: sessionData.matches || [],
@@ -290,7 +290,7 @@ async function saveScore() {
 
   isSaving.value = true
   try {
-    await sessionsApi.updateMatch(
+    await sessionStore.saveMatchResult(
       selectedClub.value.id,
       selectedSession.value.id,
       selectedMatch.value.id,
@@ -340,7 +340,7 @@ onMounted(async () => {
 .page-title {
   font-size: 1.5rem;
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .filter-section {
@@ -382,12 +382,12 @@ onMounted(async () => {
 
 .session-date {
   font-size: 0.85rem;
-  color: #64748B;
+  color: var(--color-muted);
 }
 
 .session-title {
   font-weight: 500;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .match-list {
@@ -397,10 +397,10 @@ onMounted(async () => {
 }
 
 .match-item {
-  background: #F8FAFC;
+  background: var(--color-surface);
   border-radius: 12px;
   padding: 16px;
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
 }
 
 .match-item.completed {
@@ -417,7 +417,7 @@ onMounted(async () => {
 
 .court-info {
   font-size: 0.85rem;
-  color: #64748B;
+  color: var(--color-muted);
 }
 
 .match-teams {
@@ -442,7 +442,7 @@ onMounted(async () => {
 }
 
 .team.winner .team-score {
-  color: #059669;
+  color: var(--color-primary-dark);
   font-weight: 700;
 }
 
@@ -458,13 +458,13 @@ onMounted(async () => {
 
 .player-name {
   font-size: 0.9rem;
-  color: #334155;
+  color: var(--color-dark-secondary);
 }
 
 .team-score {
   font-size: 1.5rem;
   font-weight: 600;
-  color: #64748B;
+  color: var(--color-muted);
   min-width: 30px;
   text-align: center;
 }
@@ -472,7 +472,7 @@ onMounted(async () => {
 .vs-divider {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #94A3B8;
+  color: var(--color-muted-light);
   padding: 0 8px;
 }
 
@@ -495,7 +495,7 @@ onMounted(async () => {
 
 .team-title {
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-dark);
   margin-bottom: 8px;
 }
 
@@ -504,7 +504,7 @@ onMounted(async () => {
   flex-direction: column;
   gap: 4px;
   font-size: 0.9rem;
-  color: #64748B;
+  color: var(--color-muted);
 }
 
 .score-inputs {
@@ -520,6 +520,6 @@ onMounted(async () => {
 .score-divider {
   font-size: 1.5rem;
   font-weight: 600;
-  color: #94A3B8;
+  color: var(--color-muted-light);
 }
 </style>

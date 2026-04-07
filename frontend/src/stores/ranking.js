@@ -5,9 +5,13 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import rankingsApi from '@/api/rankings'
 
+/** @typedef {import('@/types/api').Ranking} Ranking */
+
 export const useRankingStore = defineStore('ranking', () => {
   // State
+  /** @type {import('vue').Ref<Ranking[]>} */
   const rankings = ref([])
+  /** @type {import('vue').Ref<Ranking|null>} */
   const memberRanking = ref(null)
   const isLoading = ref(false)
   const error = ref(null)
@@ -23,7 +27,7 @@ export const useRankingStore = defineStore('ranking', () => {
 
     try {
       const response = await rankingsApi.getRankings(clubId, params)
-      rankings.value = response.data
+      rankings.value = Array.isArray(response.data) ? response.data : []
       return response.data
     } catch (err) {
       error.value = err.response?.data?.detail || '랭킹을 불러올 수 없습니다.'

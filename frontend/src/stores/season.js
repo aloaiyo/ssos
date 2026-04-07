@@ -3,10 +3,16 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import seasonsApi from '@/api/seasons'
 
+/** @typedef {import('@/types/api').Season} Season */
+/** @typedef {import('@/types/api').SeasonRanking} SeasonRanking */
+
 export const useSeasonStore = defineStore('season', () => {
   // State
+  /** @type {import('vue').Ref<Season[]>} */
   const seasons = ref([])
+  /** @type {import('vue').Ref<Season|null>} */
   const currentSeason = ref(null)
+  /** @type {import('vue').Ref<SeasonRanking[]>} */
   const seasonRankings = ref([])
   const isLoading = ref(false)
   const error = ref(null)
@@ -175,6 +181,13 @@ export const useSeasonStore = defineStore('season', () => {
   }
 
   /**
+   * 에러 초기화
+   */
+  function clearError() {
+    error.value = null
+  }
+
+  /**
    * 상태 초기화
    */
   function resetState() {
@@ -204,6 +217,7 @@ export const useSeasonStore = defineStore('season', () => {
     fetchSeasonRankings,
     calculateRankings,
     setCurrentSeason,
+    clearError,
     resetState,
   }
 })

@@ -238,11 +238,24 @@ async def save_extracted_matches(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="세션 ID가 필요합니다"
             )
-        session = await Session.get_or_none(id=request.session_id, is_deleted=False)
+        session = await Session.get_or_none(
+            id=request.session_id, is_deleted=False
+        ).prefetch_related("event", "season")
         if not session:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="세션을 찾을 수 없습니다"
+            )
+        # 세션이 해당 클럽 소속인지 검증
+        session_club_id = None
+        if session.event:
+            session_club_id = session.event.club_id
+        elif session.season:
+            session_club_id = session.season.club_id
+        if session_club_id != club_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="해당 클럽의 세션이 아닙니다"
             )
 
     # 플레이어 매핑 딕셔너리 생성

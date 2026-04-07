@@ -229,7 +229,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import authApi from '@/api/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -299,8 +298,7 @@ async function loadProfile() {
 async function loadMemberships() {
   isLoadingMemberships.value = true
   try {
-    const response = await authApi.getMyMemberships()
-    memberships.value = response.data || []
+    memberships.value = await authStore.getMyMemberships()
   } catch (error) {
     console.error('멤버십 로드 실패:', error)
   } finally {
@@ -345,7 +343,7 @@ async function saveMembership() {
 
   isSavingMembership.value = true
   try {
-    const response = await authApi.updateMyMembershipInClub(
+    const data = await authStore.updateMyMembershipInClub(
       editingMembership.value.club_id,
       {
         nickname: membershipForm.value.nickname || null,
@@ -356,7 +354,7 @@ async function saveMembership() {
     // 목록 업데이트
     const index = memberships.value.findIndex(m => m.id === editingMembership.value.id)
     if (index !== -1) {
-      memberships.value[index] = response.data
+      memberships.value[index] = data
     }
 
     showEditMembershipDialog.value = false

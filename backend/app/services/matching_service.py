@@ -8,10 +8,26 @@
 """
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
-from app.models.event import SessionParticipant
+from app.models.event import SessionParticipant, ParticipantCategory
 from app.models.match import Match, MatchParticipant, MatchType, Team
 from app.models.member import Gender
 import random
+
+
+def _create_match_participant_kwargs(participant: SessionParticipant, team: Team, position: int) -> dict:
+    """참가자 유형에 따라 MatchParticipant 생성 인자 결정"""
+    kwargs = {
+        "team": team,
+        "position": position,
+        "participant_category": participant.participant_category,
+    }
+    if participant.participant_category == ParticipantCategory.GUEST:
+        kwargs["guest"] = participant.guest
+    elif participant.participant_category == ParticipantCategory.ASSOCIATE:
+        kwargs["user"] = participant.user
+    else:
+        kwargs["club_member"] = participant.club_member
+    return kwargs
 
 
 async def create_matches_for_session(
@@ -118,21 +134,13 @@ async def _create_doubles_matches(
 
         # 팀 A 참가자 추가
         for idx, participant in enumerate(team_a, 1):
-            await MatchParticipant.create(
-                match=match,
-                club_member=participant.club_member,
-                team=Team.A,
-                position=idx
-            )
+            kwargs = _create_match_participant_kwargs(participant, Team.A, idx)
+            await MatchParticipant.create(match=match, **kwargs)
 
         # 팀 B 참가자 추가
         for idx, participant in enumerate(team_b, 1):
-            await MatchParticipant.create(
-                match=match,
-                club_member=participant.club_member,
-                team=Team.B,
-                position=idx
-            )
+            kwargs = _create_match_participant_kwargs(participant, Team.B, idx)
+            await MatchParticipant.create(match=match, **kwargs)
 
         matches.append(match)
         match_number += 1
@@ -192,32 +200,16 @@ async def _create_mixed_doubles_matches(
         )
 
         # 팀 A: 남1 + 여1
-        await MatchParticipant.create(
-            match=match,
-            club_member=male_participants[i].club_member,
-            team=Team.A,
-            position=1
-        )
-        await MatchParticipant.create(
-            match=match,
-            club_member=female_participants[i].club_member,
-            team=Team.A,
-            position=2
-        )
+        kwargs = _create_match_participant_kwargs(male_participants[i], Team.A, 1)
+        await MatchParticipant.create(match=match, **kwargs)
+        kwargs = _create_match_participant_kwargs(female_participants[i], Team.A, 2)
+        await MatchParticipant.create(match=match, **kwargs)
 
         # 팀 B: 남2 + 여2
-        await MatchParticipant.create(
-            match=match,
-            club_member=male_participants[i+1].club_member,
-            team=Team.B,
-            position=1
-        )
-        await MatchParticipant.create(
-            match=match,
-            club_member=female_participants[i+1].club_member,
-            team=Team.B,
-            position=2
-        )
+        kwargs = _create_match_participant_kwargs(male_participants[i+1], Team.B, 1)
+        await MatchParticipant.create(match=match, **kwargs)
+        kwargs = _create_match_participant_kwargs(female_participants[i+1], Team.B, 2)
+        await MatchParticipant.create(match=match, **kwargs)
 
         matches.append(match)
         match_number += 1
@@ -259,20 +251,12 @@ async def _create_singles_matches(
         )
 
         # 참가자 A
-        await MatchParticipant.create(
-            match=match,
-            club_member=participants[i].club_member,
-            team=Team.A,
-            position=1
-        )
+        kwargs = _create_match_participant_kwargs(participants[i], Team.A, 1)
+        await MatchParticipant.create(match=match, **kwargs)
 
         # 참가자 B
-        await MatchParticipant.create(
-            match=match,
-            club_member=participants[i+1].club_member,
-            team=Team.B,
-            position=1
-        )
+        kwargs = _create_match_participant_kwargs(participants[i+1], Team.B, 1)
+        await MatchParticipant.create(match=match, **kwargs)
 
         matches.append(match)
         match_number += 1
@@ -286,18 +270,137 @@ async def _create_singles_matches(
     return matches
 
 
-def _add_minutes(original_time, minutes: int):
+async def generate_matches_for_session_inline(
+    session,
+) -> list:
     """
-    시간에 분 추가 (하위 호환용)
+    세션의 참가자를 성별로 분류하여 자동으로 경기를 생성
 
-    주의: 이 함수는 레거시 코드 지원용입니다.
-    새 코드에서는 datetime + timedelta를 사용하세요.
+    sessions.py의 generate_matches 엔드포인트에서 호출.
+    트랜잭션은 호출자가 관리한다.
+
+    Args:
+        session: prefetch_related("participants__club_member__user",
+                 "participants__guest", "participants__user")가 완료된 Session 객체
+
+    Returns:
+        생성된 Match ID 목록
     """
-    from datetime import datetime as dt, time
-    if isinstance(original_time, time):
-        base_dt = dt.combine(dt.today(), original_time)
-        result_dt = base_dt + timedelta(minutes=minutes)
-        return result_dt.time()
-    else:
-        # datetime인 경우
-        return original_time + timedelta(minutes=minutes)
+    import random as _random
+
+    # 기존 경기 삭제
+    await Match.filter(session=session).delete()
+
+    # 참가자를 성별로 분류
+    males = []
+    females = []
+    for p in session.participants:
+        gender = None
+        if p.club_member and p.club_member.user:
+            gender = p.club_member.user.gender
+        elif p.guest:
+            gender = p.guest.gender
+        elif p.user:
+            gender = p.user.gender
+
+        if gender == "male":
+            males.append(p)
+        elif gender == "female":
+            females.append(p)
+
+    _random.shuffle(males)
+    _random.shuffle(females)
+
+    matches_created = []
+    match_number = 0
+
+    # 혼합 복식 생성 (남녀 짝)
+    while len(males) >= 2 and len(females) >= 2:
+        match_number += 1
+        match = await Match.create(
+            session=session,
+            match_number=match_number,
+            court_number=(match_number - 1) % session.num_courts + 1,
+            scheduled_datetime=session.start_datetime,
+            match_type=MatchType.MIXED_DOUBLES,
+            status="scheduled"
+        )
+
+        m1, m2 = males.pop(0), males.pop(0)
+        f1, f2 = females.pop(0), females.pop(0)
+
+        team_positions = {Team.A: 0, Team.B: 0}
+        for p, team in [(m1, Team.A), (f1, Team.A), (m2, Team.B), (f2, Team.B)]:
+            team_positions[team] += 1
+            pos = team_positions[team]
+            await MatchParticipant.create(
+                match=match,
+                club_member=p.club_member,
+                guest=p.guest,
+                user=p.user,
+                participant_category=p.participant_category,
+                team=team,
+                position=pos
+            )
+
+        matches_created.append(match.id)
+
+    # 남자 복식 생성
+    while len(males) >= 4:
+        match_number += 1
+        match = await Match.create(
+            session=session,
+            match_number=match_number,
+            court_number=(match_number - 1) % session.num_courts + 1,
+            scheduled_datetime=session.start_datetime,
+            match_type=MatchType.MENS_DOUBLES,
+            status="scheduled"
+        )
+
+        team_positions = {Team.A: 0, Team.B: 0}
+        for i, team in enumerate([Team.A, Team.A, Team.B, Team.B]):
+            p = males.pop(0)
+            team_positions[team] += 1
+            pos = team_positions[team]
+            await MatchParticipant.create(
+                match=match,
+                club_member=p.club_member,
+                guest=p.guest,
+                user=p.user,
+                participant_category=p.participant_category,
+                team=team,
+                position=pos
+            )
+
+        matches_created.append(match.id)
+
+    # 여자 복식 생성
+    while len(females) >= 4:
+        match_number += 1
+        match = await Match.create(
+            session=session,
+            match_number=match_number,
+            court_number=(match_number - 1) % session.num_courts + 1,
+            scheduled_datetime=session.start_datetime,
+            match_type=MatchType.WOMENS_DOUBLES,
+            status="scheduled"
+        )
+
+        team_positions = {Team.A: 0, Team.B: 0}
+        for i, team in enumerate([Team.A, Team.A, Team.B, Team.B]):
+            p = females.pop(0)
+            team_positions[team] += 1
+            pos = team_positions[team]
+            await MatchParticipant.create(
+                match=match,
+                club_member=p.club_member,
+                guest=p.guest,
+                user=p.user,
+                participant_category=p.participant_category,
+                team=team,
+                position=pos
+            )
+
+        matches_created.append(match.id)
+
+    return matches_created

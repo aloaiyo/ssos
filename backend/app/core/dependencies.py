@@ -124,7 +124,7 @@ class ClubPermission:
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="동호회를 찾을 수 없습니다"
                 )
-            # 임시 멤버십 객체 생성 (슈퍼 관리자용)
+            # 실제 멤버십 조회 (슈퍼 관리자용)
             membership = await ClubMember.get_or_none(
                 club_id=club_id,
                 user_id=current_user.id,
@@ -132,8 +132,17 @@ class ClubPermission:
             )
             if membership:
                 return membership
-            # 슈퍼 관리자지만 멤버가 아닌 경우 - 가상 멤버십 반환 불가
-            # 실제 멤버십이 필요한 작업에서는 에러 발생
+            # 슈퍼 관리자지만 멤버가 아닌 경우 - 임시 가상 멤버십 반환
+            # 주의: id=None이므로 DB 참조(FK)에 사용하면 안 됨
+            virtual_membership = ClubMember(
+                id=-1,  # 가상 멤버십 표식 (DB에 저장하지 않음)
+                club=club,
+                user=current_user,
+                role=MemberRole.MANAGER,
+                status=MemberStatus.ACTIVE,
+            )
+            virtual_membership._is_virtual = True
+            return virtual_membership
 
         # 클럽 존재 확인
         club = await Club.get_or_none(id=club_id, is_deleted=False)

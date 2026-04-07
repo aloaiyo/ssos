@@ -36,43 +36,57 @@ async def get_club_with_schedules(club: Club) -> dict:
     return club_dict
 
 
-@router.get("", response_model=List[ClubSearchResponse])
+@router.get("")
 async def list_clubs(
     current_user: User = Depends(get_current_active_user),
     search: str = None,
     skip: int = 0,
-    limit: int = 20
+    limit: int = 20,
+    page: int = None,
+    page_size: int = None,
 ):
     """
     동호회 목록 조회
     - 기본: 최근 생성된 20개 동호회
     - 검색: 이름에 검색어가 포함된 동호회
     - 회원수와 내 가입 상태 포함
+    - page 파라미터로 페이지네이션 지원
     """
     from app.models.member import ClubMember, MemberStatus
+    from tortoise.functions import Count
+    from tortoise.queryset import Q
+    from app.schemas.pagination import paginate_query
 
     query = Club.filter(is_deleted=False)
     if search:
         query = query.filter(name__icontains=search)
 
-    # 최신순 정렬
-    clubs = await query.order_by("-created_at").offset(skip).limit(limit)
+    # 활성 회원수를 annotate로 한 번에 조회 (N+1 방지)
+    annotated_query = query.annotate(
+        member_count=Count(
+            "members",
+            _filter=Q(members__status=MemberStatus.ACTIVE, members__is_deleted=False)
+        )
+    ).order_by("-created_at")
+
+    if page is not None:
+        clubs, pagination = await paginate_query(annotated_query, page, page_size)
+    else:
+        clubs = await annotated_query.offset(skip).limit(limit)
+        pagination = None
+
+    # 클럽 ID 목록으로 내 멤버십 일괄 조회
+    club_ids = [club.id for club in clubs]
+    my_memberships = await ClubMember.filter(
+        club_id__in=club_ids,
+        user=current_user,
+        is_deleted=False
+    )
+    membership_map = {m.club_id: m for m in my_memberships}
 
     result = []
     for club in clubs:
-        # 활성 회원수 조회
-        member_count = await ClubMember.filter(
-            club=club,
-            status=MemberStatus.ACTIVE,
-            is_deleted=False
-        ).count()
-
-        # 내 가입 상태 조회
-        my_membership = await ClubMember.get_or_none(
-            club=club,
-            user=current_user,
-            is_deleted=False
-        )
+        my_membership = membership_map.get(club.id)
         my_status = my_membership.status.value if my_membership else None
 
         result.append(ClubSearchResponse(
@@ -83,10 +97,12 @@ async def list_clubs(
             location=club.location,
             is_join_allowed=club.is_join_allowed,
             requires_approval=club.requires_approval,
-            member_count=member_count,
+            member_count=club.member_count,
             my_status=my_status
         ))
 
+    if pagination:
+        return {**pagination, "items": result}
     return result
 
 
@@ -226,18 +242,32 @@ async def leave_club(
             detail="동호회를 찾을 수 없습니다"
         )
         
-    from app.models.member import ClubMember, MemberStatus
-    
+    from app.models.member import ClubMember, MemberRole, MemberStatus
+
     member = await ClubMember.get_or_none(club=club, user=current_user)
     if not member or member.status != MemberStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="활동 중인 회원이 아닙니다"
         )
-        
+
+    # 마지막 매니저인지 확인
+    if member.role == MemberRole.MANAGER:
+        manager_count = await ClubMember.filter(
+            club=club,
+            role=MemberRole.MANAGER,
+            status=MemberStatus.ACTIVE,
+            is_deleted=False
+        ).count()
+        if manager_count <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="마지막 관리자는 탈퇴할 수 없습니다. 다른 회원에게 관리자 권한을 이전해주세요."
+            )
+
     member.status = MemberStatus.LEFT
     await member.save()
-    
+
     return {"message": "동호회를 탈퇴했습니다"}
 
 

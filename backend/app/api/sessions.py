@@ -168,27 +168,30 @@ def format_participant_data(p, include_team: bool = False) -> dict:
 async def list_sessions(
     club_id: int,
     season_id: Optional[int] = None,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None,
     current_user: User = Depends(get_current_active_user)
 ):
-    """세션 목록 조회"""
+    """세션 목록 조회 (page 파라미터로 페이지네이션 지원)"""
     from tortoise.expressions import Q
+    from app.schemas.pagination import paginate_query
 
     club = await get_club_or_404(club_id)
 
     # 시즌 필터링 또는 전체 조회
     if season_id:
-        # 특정 시즌의 세션만 조회
-        sessions = await Session.filter(
+        query = Session.filter(
             season_id=season_id, is_deleted=False
         ).prefetch_related("season", "participants__club_member__user").order_by("-start_datetime")
     else:
-        # 클럽의 모든 세션 조회 (이벤트 또는 시즌을 통해 연결된 모든 세션)
-        sessions = await Session.filter(
+        query = Session.filter(
             Q(event__club_id=club_id) | Q(season__club_id=club_id),
             is_deleted=False
         ).prefetch_related("event", "season", "participants__club_member__user").order_by("-start_datetime")
 
-    return [{
+    sessions, pagination = await paginate_query(query, page, page_size)
+
+    items = [{
         "id": s.id,
         "title": s.title,
         # 하위 호환: date, start_time, end_time (KST 기준, 프로퍼티에서 변환)
@@ -209,6 +212,10 @@ async def list_sessions(
         "season_name": s.season.name if s.season else None,
         "participant_count": len(s.participants),
     } for s in sessions]
+
+    if pagination:
+        return {**pagination, "items": items}
+    return items
 
 
 @router.post("")
@@ -791,6 +798,8 @@ async def update_match(
             result.winner_team = Team.A
         elif result.team_b_score > result.team_a_score:
             result.winner_team = Team.B
+        else:
+            result.winner_team = None
 
         await result.save()
     else:
@@ -948,6 +957,9 @@ async def generate_matches(
     membership: ClubMember = Depends(require_club_manager)
 ):
     """경기 자동 생성"""
+    from tortoise.transactions import in_transaction
+    from app.services.matching_service import generate_matches_for_session_inline
+
     # 기본 세션 검증
     await get_session_or_404(session_id, club_id)
 
@@ -963,113 +975,8 @@ async def generate_matches(
             detail="최소 2명의 참가자가 필요합니다"
         )
 
-    # 기존 경기 삭제
-    await Match.filter(session=session).delete()
-
-    # 참가자 분류
-    males = []
-    females = []
-    for p in session.participants:
-        gender = None
-        if p.club_member and p.club_member.user:
-            gender = p.club_member.user.gender
-        elif p.guest:
-            gender = p.guest.gender
-        elif p.user:
-            gender = p.user.gender
-
-        if gender == "male":
-            males.append(p)
-        elif gender == "female":
-            females.append(p)
-
-    import random
-    random.shuffle(males)
-    random.shuffle(females)
-
-    matches_created = []
-    match_number = 0
-
-    # 혼합 복식 생성 (남녀 짝)
-    while len(males) >= 2 and len(females) >= 2:
-        match_number += 1
-        match = await Match.create(
-            session=session,
-            match_number=match_number,
-            court_number=(match_number - 1) % session.num_courts + 1,
-            scheduled_datetime=session.start_datetime,
-            match_type=MatchType.MIXED_DOUBLES,
-            status=MatchStatus.SCHEDULED
-        )
-
-        # 팀 A: 남1 + 여1
-        m1, m2 = males.pop(0), males.pop(0)
-        f1, f2 = females.pop(0), females.pop(0)
-
-        for p, team in [(m1, Team.A), (f1, Team.A), (m2, Team.B), (f2, Team.B)]:
-            await MatchParticipant.create(
-                match=match,
-                club_member=p.club_member,
-                guest=p.guest,
-                user=p.user,
-                participant_category=p.participant_category,
-                team=team,
-                position=1
-            )
-
-        matches_created.append(match.id)
-
-    # 남자 복식 생성
-    while len(males) >= 4:
-        match_number += 1
-        match = await Match.create(
-            session=session,
-            match_number=match_number,
-            court_number=(match_number - 1) % session.num_courts + 1,
-            scheduled_datetime=session.start_datetime,
-            match_type=MatchType.MENS_DOUBLES,
-            status=MatchStatus.SCHEDULED
-        )
-
-        for i, team in enumerate([Team.A, Team.A, Team.B, Team.B]):
-            p = males.pop(0)
-            await MatchParticipant.create(
-                match=match,
-                club_member=p.club_member,
-                guest=p.guest,
-                user=p.user,
-                participant_category=p.participant_category,
-                team=team,
-                position=1
-            )
-
-        matches_created.append(match.id)
-
-    # 여자 복식 생성
-    while len(females) >= 4:
-        match_number += 1
-        match = await Match.create(
-            session=session,
-            match_number=match_number,
-            court_number=(match_number - 1) % session.num_courts + 1,
-            scheduled_datetime=session.start_datetime,
-            match_type=MatchType.WOMENS_DOUBLES,
-            status=MatchStatus.SCHEDULED
-        )
-
-        for i, team in enumerate([Team.A, Team.A, Team.B, Team.B]):
-            p = females.pop(0)
-            await MatchParticipant.create(
-                match=match,
-                club_member=p.club_member,
-                guest=p.guest,
-                user=p.user,
-                participant_category=p.participant_category,
-                team=team,
-                position=1
-            )
-
-        matches_created.append(match.id)
+    async with in_transaction():
+        matches_created = await generate_matches_for_session_inline(session)
 
     return {"message": f"{len(matches_created)}개의 경기가 생성되었습니다", "match_ids": matches_created}
 

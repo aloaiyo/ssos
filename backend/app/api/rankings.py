@@ -7,7 +7,8 @@ from app.schemas.ranking import RankingResponse, RankingDetailResponse
 from app.models.ranking import Ranking
 from app.models.club import Club
 from app.models.user import User
-from app.core.dependencies import get_current_active_user, get_club_or_404
+from app.core.dependencies import get_current_active_user, require_club_manager, get_club_or_404
+from app.models.member import ClubMember
 
 router = APIRouter(tags=["랭킹"])
 
@@ -83,32 +84,40 @@ async def get_member_ranking(
 @router.post("/clubs/{club_id}/rankings/update")
 async def update_rankings(
     club_id: int,
-    current_user: User = Depends(get_current_active_user)
+    membership: ClubMember = Depends(require_club_manager)
 ):
     """동호회 랭킹 갱신 (전체 경기 결과 기반)"""
     from app.models.match import Match, MatchResult, MatchParticipant, Team, MatchStatus
-    from app.models.member import ClubMember
     from collections import defaultdict
     from tortoise.transactions import in_transaction
+    from tortoise.queryset import Q
 
     await get_club_or_404(club_id)
 
-    # 클럽의 모든 완료된 경기 조회
+    # 클럽의 모든 완료된 경기 조회 (이벤트 기반 + 시즌 기반)
     matches = await Match.filter(
-        session__event__club_id=club_id,
+        Q(session__event__club_id=club_id) | Q(session__season__club_id=club_id),
         status=MatchStatus.COMPLETED,
         is_deleted=False
     ).prefetch_related("participants__club_member")
+
+    # 배치 쿼리로 모든 경기 결과 조회 (N+1 방지)
+    match_ids = [m.id for m in matches]
+    results_map = {}
+    if match_ids:
+        all_results = await MatchResult.filter(match_id__in=match_ids)
+        results_map = {r.match_id: r for r in all_results}
 
     # 통계 집계
     stats = defaultdict(lambda: {"wins": 0, "draws": 0, "losses": 0, "total": 0})
 
     for match in matches:
-        result = await MatchResult.get_or_none(match=match)
+        result = results_map.get(match.id)
         if not result:
             continue
 
-        participants = await MatchParticipant.filter(match=match).prefetch_related("club_member")
+        # prefetch된 participants 사용 (N+1 방지)
+        participants = match.participants
 
         team_a_members = [p.club_member_id for p in participants if p.team == Team.A and p.club_member_id]
         team_b_members = [p.club_member_id for p in participants if p.team == Team.B and p.club_member_id]

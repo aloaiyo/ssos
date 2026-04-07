@@ -75,8 +75,11 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useClubStore } from '@/stores/club'
+
+const router = useRouter()
 
 const clubStore = useClubStore()
 const { clubs, selectedClubId } = storeToRefs(clubStore)
@@ -87,7 +90,7 @@ const isMobile = ref(false)
 // 선택된 클럽 이름
 const selectedClubName = computed(() => {
   if (!selectedClubId.value) return '동호회'
-  const club = clubs.value.find(c => c.id === parseInt(selectedClubId.value))
+  const club = clubs.value.find(c => c.id === parseInt(selectedClubId.value, 10))
   return club?.name || '동호회'
 })
 
@@ -127,7 +130,7 @@ const scheduleMenuItems = [
 ]
 
 function goToSettings() {
-  console.log('설정 페이지')
+  router.push({ name: 'my-profile' })
 }
 
 // 외부에서 드로어 열기

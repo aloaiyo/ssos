@@ -366,12 +366,16 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useClubStore } from '@/stores/club'
 import { useSeasonStore } from '@/stores/season'
-import sessionsApi from '@/api/sessions'
+import { useSessionStore } from '@/stores/session'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { showAlert } = useConfirmDialog()
 
 const route = useRoute()
 const router = useRouter()
 const clubStore = useClubStore()
 const seasonStore = useSeasonStore()
+const sessionStore = useSessionStore()
 
 const selectedClub = computed(() => clubStore.selectedClub)
 const season = computed(() => seasonStore.currentSeason)
@@ -561,7 +565,7 @@ async function deleteSeason() {
     router.push({ name: 'season-list' })
   } catch (error) {
     console.error('시즌 삭제 실패:', error)
-    alert(error.response?.data?.detail || '시즌 삭제에 실패했습니다')
+    showAlert(error.response?.data?.detail || '시즌 삭제에 실패했습니다')
   } finally {
     isDeleting.value = false
   }
@@ -589,7 +593,7 @@ async function createSession() {
     const d = new Date(sessionForm.value.date)
     const datePart = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-    await sessionsApi.createSession(selectedClub.value.id, {
+    await sessionStore.createSession(selectedClub.value.id, {
       title: sessionForm.value.title,
       date: datePart,
       start_time: sessionForm.value.start_time + ':00',  // HH:MM:SS 형식
@@ -634,10 +638,9 @@ async function loadSeason() {
 async function loadSessions() {
   if (!selectedClub.value?.id || !season.value?.id) return
   try {
-    const response = await sessionsApi.getSessions(selectedClub.value.id, { season_id: season.value.id })
-    sessions.value = Array.isArray(response.data) ? response.data : []
-  } catch (error) {
-    console.error('세션 목록 조회 실패:', error)
+    const data = await sessionStore.fetchSessions(selectedClub.value.id, { season_id: season.value.id })
+    sessions.value = Array.isArray(data) ? data : []
+  } catch {
     sessions.value = []
   }
 }

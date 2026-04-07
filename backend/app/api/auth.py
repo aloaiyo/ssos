@@ -2,6 +2,7 @@
 인증 API (HTTP-only 쿠키 + Cognito 이메일 인증)
 """
 from fastapi import APIRouter, HTTPException, status, Response, Request, Depends
+from pydantic import BaseModel as PydanticBase, EmailStr
 from app.schemas.user import (
     SignUpRequest,
     VerifyEmailRequest,
@@ -12,6 +13,7 @@ from app.schemas.user import (
     CognitoCallbackRequest,
 )
 from app.models.user import User, UserRole, SubscriptionTier
+from app.core.security import verify_access_token
 from app.models.member import ClubMember, MemberStatus
 from typing import List, Optional
 from app.services.cognito_service import CognitoService
@@ -144,18 +146,16 @@ async def verify_email(verify_data: VerifyEmailRequest, response: Response):
         )
 
 
-@router.post("/resend-code", response_model=dict)
-async def resend_verification_code(email_data: dict):
-    """인증번호 재발송"""
-    email = email_data.get("email")
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="이메일을 입력해주세요"
-        )
+class ResendCodeRequest(PydanticBase):
+    """인증번호 재발송 요청 스키마"""
+    email: EmailStr
 
+
+@router.post("/resend-code", response_model=dict)
+async def resend_verification_code(email_data: ResendCodeRequest):
+    """인증번호 재발송"""
     try:
-        await CognitoService.resend_confirmation_code(email)
+        await CognitoService.resend_confirmation_code(email_data.email)
         return {"message": "인증번호가 재발송되었습니다"}
     except ValueError as e:
         raise HTTPException(
@@ -425,15 +425,22 @@ async def update_me(
 async def check_auth(request: Request):
     """
     인증 상태 확인 (프론트엔드용)
-    쿠키가 있으면 로그인 상태
+    쿠키의 토큰이 유효하면 로그인 상태
     """
     token = request.cookies.get("access_token")
-    return {"authenticated": token is not None}
+    if not token:
+        return {"authenticated": False}
+
+    try:
+        user_id = verify_access_token(token)
+        return {"authenticated": user_id is not None}
+    except Exception:
+        return {"authenticated": False}
 
 
 # ============ 클럽 멤버십 관련 스키마 ============
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class ClubMembershipResponse(BaseModel):

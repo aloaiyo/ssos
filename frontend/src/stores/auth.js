@@ -192,6 +192,32 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
+   * 내 클럽 멤버십 목록 조회
+   */
+  async function getMyMemberships() {
+    try {
+      const response = await authApi.getMyMemberships()
+      return response.data || []
+    } catch (err) {
+      error.value = err.response?.data?.detail || '멤버십 목록을 불러올 수 없습니다.'
+      throw err
+    }
+  }
+
+  /**
+   * 특정 클럽에서의 내 프로필 수정
+   */
+  async function updateMyMembershipInClub(clubId, data) {
+    try {
+      const response = await authApi.updateMyMembershipInClub(clubId, data)
+      return response.data
+    } catch (err) {
+      error.value = err.response?.data?.detail || '클럽 프로필 저장에 실패했습니다.'
+      throw err
+    }
+  }
+
+  /**
    * 에러 초기화
    */
   function clearError() {
@@ -238,6 +264,8 @@ export const useAuthStore = defineStore('auth', () => {
     checkAuth,
     loadUser,
     updateProfile,
+    getMyMemberships,
+    updateMyMembershipInClub,
     clearError,
     handleCallback,
   }

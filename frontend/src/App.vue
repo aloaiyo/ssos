@@ -28,6 +28,32 @@
 
     <!-- 전역 에러 알림 -->
     <error-alert />
+
+    <!-- 전역 스낵바 (alert 대체) -->
+    <v-snackbar
+      v-model="snackbar"
+      :color="snackbarColor"
+      :timeout="4000"
+      location="top"
+    >
+      {{ snackbarMessage }}
+      <template v-slot:actions>
+        <v-btn variant="text" color="white" @click="closeSnackbar">닫기</v-btn>
+      </template>
+    </v-snackbar>
+
+    <!-- 전역 확인 다이얼로그 (confirm 대체) -->
+    <v-dialog v-model="confirmDialog" max-width="400" persistent>
+      <v-card>
+        <v-card-title>{{ confirmTitle }}</v-card-title>
+        <v-card-text>{{ confirmMessage }}</v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="handleCancel">취소</v-btn>
+          <v-btn color="primary" variant="flat" @click="handleConfirm">확인</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-app>
 </template>
 
@@ -40,6 +66,19 @@ import AppBar from '@/components/layout/AppBar.vue'
 import NavigationDrawer from '@/components/layout/NavigationDrawer.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import ErrorAlert from '@/components/common/ErrorAlert.vue'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const {
+  snackbar,
+  snackbarMessage,
+  snackbarColor,
+  closeSnackbar,
+  confirmDialog,
+  confirmMessage,
+  confirmTitle,
+  handleConfirm,
+  handleCancel,
+} = useConfirmDialog()
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -60,7 +99,7 @@ const isAuthPage = computed(() => {
 
 // 대시보드 레이아웃 표시 여부
 const showDashboardLayout = computed(() => {
-  return !isAuthPage.value && !isLandingPage.value
+  return authStore.isAuthenticated && !isAuthPage.value && !isLandingPage.value
 })
 </script>
 

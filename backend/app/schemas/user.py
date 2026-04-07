@@ -50,8 +50,8 @@ class EmailLoginRequest(BaseModel):
 
 class UserUpdate(BaseModel):
     """사용자 수정 스키마"""
-    name: Optional[str] = None
-    gender: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    gender: Optional[str] = Field(None, pattern="^(male|female)$")
     birth_date: Optional[date] = None
 
 

@@ -87,6 +87,8 @@ export const MEMBER_ROLE = {
   manager: { color: 'primary', label: '매니저' },
   member: { color: 'success', label: '회원' },
   guest: { color: 'grey', label: '게스트' },
+  friend: { color: 'info', label: '지인' },
+  alumni: { color: 'secondary', label: '졸업회원' },
 }
 
 export function getMemberRoleColor(role) {

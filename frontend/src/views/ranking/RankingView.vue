@@ -23,11 +23,11 @@
 
     <!-- 로딩 -->
     <div v-if="isLoading" class="loading-container">
-      <v-progress-circular indeterminate color="primary" size="48"></v-progress-circular>
+      <v-skeleton-loader type="table-heading, table-row-divider@5" />
     </div>
 
     <!-- 랭킹 테이블 -->
-    <div v-else-if="rankings.length > 0" class="ranking-section">
+    <div v-else-if="rankings.length > 0" class="ranking-section" aria-live="polite">
       <!-- 시즌 정보 -->
       <div v-if="seasonInfo" class="season-info">
         <v-chip :color="getSeasonStatusColor(seasonInfo.status)" size="small" variant="tonal">
@@ -135,11 +135,16 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useClubStore } from '@/stores/club'
-import seasonsApi from '@/api/seasons'
-import rankingsApi from '@/api/rankings'
+import { useSeasonStore } from '@/stores/season'
+import { useRankingStore } from '@/stores/ranking'
 import { getSeasonStatusColor, getSeasonStatusLabel } from '@/utils/constants'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { showAlert } = useConfirmDialog()
 
 const clubStore = useClubStore()
+const seasonStore = useSeasonStore()
+const rankingStore = useRankingStore()
 
 const selectedClub = computed(() => clubStore.selectedClub)
 const isManager = computed(() => clubStore.isManagerOfSelectedClub)
@@ -165,8 +170,8 @@ async function loadSeasons() {
 
   isLoadingSeasons.value = true
   try {
-    const response = await seasonsApi.getSeasons(selectedClub.value.id)
-    seasons.value = response.data || []
+    await seasonStore.fetchSeasons(selectedClub.value.id)
+    seasons.value = seasonStore.seasons
 
     // 활성 시즌이 있으면 선택, 없으면 첫 번째 시즌 선택
     const activeSeason = seasons.value.find(s => s.status === 'active')
@@ -179,8 +184,8 @@ async function loadSeasons() {
     if (selectedSeasonId.value) {
       await loadRankings()
     }
-  } catch (error) {
-    console.error('시즌 목록 로드 실패:', error)
+  } catch {
+    // error handled by store
   } finally {
     isLoadingSeasons.value = false
   }
@@ -191,11 +196,10 @@ async function loadRankings() {
 
   isLoading.value = true
   try {
-    const response = await rankingsApi.getSeasonRankings(selectedClub.value.id, selectedSeasonId.value)
-    seasonInfo.value = response.data.season
-    rankings.value = response.data.rankings || []
-  } catch (error) {
-    console.error('랭킹 로드 실패:', error)
+    const data = await seasonStore.fetchSeasonRankings(selectedClub.value.id, selectedSeasonId.value)
+    seasonInfo.value = data.season
+    rankings.value = data.rankings || []
+  } catch {
     rankings.value = []
   } finally {
     isLoading.value = false
@@ -207,11 +211,10 @@ async function calculateRankings() {
 
   isCalculating.value = true
   try {
-    await rankingsApi.calculateSeasonRankings(selectedClub.value.id, selectedSeasonId.value)
+    await seasonStore.calculateRankings(selectedClub.value.id, selectedSeasonId.value)
     await loadRankings()
   } catch (error) {
-    console.error('랭킹 계산 실패:', error)
-    alert(error.response?.data?.detail || '랭킹 계산에 실패했습니다')
+    showAlert(error.response?.data?.detail || '랭킹 계산에 실패했습니다')
   } finally {
     isCalculating.value = false
   }
@@ -240,7 +243,7 @@ onMounted(() => {
 .page-title {
   font-size: 1.5rem;
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .season-selector {
@@ -255,7 +258,7 @@ onMounted(() => {
 
 .ranking-section {
   background: white;
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
   border-radius: 16px;
   padding: 20px;
 }
@@ -266,13 +269,13 @@ onMounted(() => {
   gap: 12px;
   margin-bottom: 16px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #E2E8F0;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .season-name {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .points-info {
@@ -292,13 +295,13 @@ onMounted(() => {
   align-items: center;
   gap: 16px;
   padding: 16px;
-  background: #F8FAFC;
+  background: var(--color-surface);
   border-radius: 12px;
   transition: all 0.2s;
 }
 
 .ranking-card:hover {
-  background: #F1F5F9;
+  background: var(--color-surface-hover);
 }
 
 .ranking-card.top-three {
@@ -334,7 +337,7 @@ onMounted(() => {
 .rank-number {
   font-size: 1.2rem;
   font-weight: 700;
-  color: #64748B;
+  color: var(--color-muted);
 }
 
 .player-info {
@@ -347,16 +350,16 @@ onMounted(() => {
 .player-name {
   font-size: 1rem;
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .player-stats {
   font-size: 0.85rem;
-  color: #64748B;
+  color: var(--color-muted);
 }
 
 .player-stats .wins {
-  color: #059669;
+  color: var(--color-primary-dark);
 }
 
 .player-stats .draws {
@@ -373,7 +376,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: #059669;
+  background: var(--color-primary-dark);
   color: white;
   padding: 8px 16px;
   border-radius: 12px;
@@ -400,24 +403,24 @@ onMounted(() => {
 .win-rate-value {
   font-size: 1rem;
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .win-rate-label {
   font-size: 0.7rem;
-  color: #64748B;
+  color: var(--color-muted);
 }
 
 .admin-actions {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid #E2E8F0;
+  border-top: 1px solid var(--color-border);
   display: flex;
   justify-content: center;
 }
 
 .empty-card {
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
   border-radius: 16px;
 }
 

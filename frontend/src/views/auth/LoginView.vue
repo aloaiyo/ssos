@@ -209,9 +209,13 @@ async function handleLogin() {
   try {
     await authStore.login(email.value, password.value)
 
-    // 리다이렉트 처리
+    // 리다이렉트 처리 (open redirect 방지)
     const redirect = route.query.redirect || '/dashboard'
-    router.push(redirect)
+    if (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) {
+      router.push(redirect)
+    } else {
+      router.push('/dashboard')
+    }
   } catch (error) {
     console.error('로그인 실패:', error)
   }

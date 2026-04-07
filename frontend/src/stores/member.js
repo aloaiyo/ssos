@@ -3,9 +3,13 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import membersApi from '@/api/members'
 
+/** @typedef {import('@/types/api').ClubMember} ClubMember */
+
 export const useMemberStore = defineStore('member', () => {
   // State
+  /** @type {import('vue').Ref<ClubMember[]>} */
   const members = ref([])
+  /** @type {import('vue').Ref<ClubMember|null>} */
   const currentMember = ref(null)
   const isLoading = ref(false)
   const error = ref(null)
@@ -20,7 +24,7 @@ export const useMemberStore = defineStore('member', () => {
 
     try {
       const response = await membersApi.getMembers(clubId, params)
-      members.value = response.data
+      members.value = Array.isArray(response.data) ? response.data : []
     } catch (err) {
       error.value = err.response?.data?.detail || '회원 목록을 불러올 수 없습니다.'
       throw err
@@ -131,6 +135,13 @@ export const useMemberStore = defineStore('member', () => {
     }
   }
 
+  /**
+   * 에러 초기화
+   */
+  function clearError() {
+    error.value = null
+  }
+
   return {
     // State
     members,
@@ -144,5 +155,6 @@ export const useMemberStore = defineStore('member', () => {
     updateMember,
     deleteMember,
     fetchMemberStats,
+    clearError,
   }
 })

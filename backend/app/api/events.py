@@ -8,21 +8,32 @@ from app.models.event import Event
 from app.models.club import Club
 from app.models.user import User
 from app.models.member import ClubMember
-from app.core.dependencies import get_current_active_user, require_club_manager, get_club_or_404
+from app.core.dependencies import get_current_active_user, require_club_member, require_club_manager, get_club_or_404
 
 router = APIRouter(tags=["일정"])
 
 
-@router.get("/clubs/{club_id}/events", response_model=List[EventResponse])
+@router.get("/clubs/{club_id}/events")
 async def list_events(
     club_id: int,
-    current_user: User = Depends(get_current_active_user),
+    membership: ClubMember = Depends(require_club_member),
     skip: int = 0,
-    limit: int = 100
+    limit: int = 100,
+    page: int = None,
+    page_size: int = None,
 ):
-    """일정 목록 조회"""
+    """일정 목록 조회 (page 파라미터로 페이지네이션 지원)"""
+    from app.schemas.pagination import paginate_query
+
     await get_club_or_404(club_id)
-    events = await Event.filter(club_id=club_id, is_deleted=False).offset(skip).limit(limit)
+    query = Event.filter(club_id=club_id, is_deleted=False)
+
+    if page is not None:
+        events, pagination = await paginate_query(query, page, page_size)
+        items = [EventResponse.model_validate(event) for event in events]
+        return {**pagination, "items": items}
+
+    events = await query.offset(skip).limit(limit)
     return [EventResponse.model_validate(event) for event in events]
 
 

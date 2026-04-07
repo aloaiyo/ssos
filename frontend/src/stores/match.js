@@ -6,9 +6,13 @@ import { ref } from 'vue'
 import matchesApi from '@/api/matches'
 import sessionsApi from '@/api/sessions'
 
+/** @typedef {import('@/types/api').Match} Match */
+
 export const useMatchStore = defineStore('match', () => {
   // State
+  /** @type {import('vue').Ref<Match[]>} */
   const matches = ref([])
+  /** @type {import('vue').Ref<Match|null>} */
   const currentMatch = ref(null)
   const isLoading = ref(false)
   const error = ref(null)

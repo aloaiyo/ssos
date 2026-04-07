@@ -13,7 +13,7 @@
         class="session-card"
       >
         <!-- 세션 헤더 -->
-        <div class="session-header" @click="toggleSession(session.id)">
+        <div class="session-header" role="button" tabindex="0" :aria-expanded="expandedSessions.includes(session.id)" @click="toggleSession(session.id)" @keydown.enter="toggleSession(session.id)">
           <div class="session-date">
             <span class="date-badge">{{ formatDate(session.date) }}</span>
             <span class="time-badge">{{ session.start_time?.substring(0, 5) }} - {{ session.end_time?.substring(0, 5) }}</span>
@@ -122,7 +122,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useClubStore } from '@/stores/club'
 import { useAuthStore } from '@/stores/auth'
-import apiClient from '@/api'
+import { useSessionStore } from '@/stores/session'
 import {
   getSessionStatusColor,
   getSessionStatusLabel,
@@ -133,6 +133,7 @@ import {
 
 const clubStore = useClubStore()
 const authStore = useAuthStore()
+const sessionStore = useSessionStore()
 
 const selectedClub = computed(() => clubStore.selectedClub)
 const currentUser = computed(() => authStore.user)
@@ -185,8 +186,8 @@ async function loadSessions() {
 
   isLoading.value = true
   try {
-    const response = await apiClient.get(`/clubs/${selectedClub.value.id}/sessions`)
-    sessions.value = response.data
+    const data = await sessionStore.fetchSessions(selectedClub.value.id)
+    sessions.value = data
 
     // 가장 최근 세션 자동 확장
     if (sessions.value.length > 0) {
@@ -207,10 +208,10 @@ async function loadSessionDetail(sessionId) {
   if (!selectedClub.value?.id) return
 
   try {
-    const response = await apiClient.get(`/clubs/${selectedClub.value.id}/sessions/${sessionId}`)
+    const data = await sessionStore.fetchSession(selectedClub.value.id, sessionId)
     const index = sessions.value.findIndex(s => s.id === sessionId)
     if (index >= 0) {
-      sessions.value[index] = { ...sessions.value[index], ...response.data }
+      sessions.value[index] = { ...sessions.value[index], ...data }
     }
   } catch (error) {
     console.error('세션 상세 로드 실패:', error)
@@ -240,7 +241,7 @@ onMounted(() => {
 .page-title {
   font-size: 1.5rem;
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .sessions-list {
@@ -251,7 +252,7 @@ onMounted(() => {
 
 .session-card {
   background: white;
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
   border-radius: 16px;
   overflow: hidden;
 }
@@ -266,7 +267,7 @@ onMounted(() => {
 }
 
 .session-header:hover {
-  background: #F8FAFC;
+  background: var(--color-surface);
 }
 
 .session-date {
@@ -278,12 +279,12 @@ onMounted(() => {
 .date-badge {
   font-size: 1rem;
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .time-badge {
   font-size: 0.85rem;
-  color: #64748B;
+  color: var(--color-muted);
 }
 
 .session-meta {
@@ -295,12 +296,12 @@ onMounted(() => {
 .matches-list {
   border-top: 1px solid #E2E8F0;
   padding: 16px;
-  background: #F8FAFC;
+  background: var(--color-surface);
 }
 
 .match-card {
   background: white;
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 16px;
   margin-bottom: 12px;
@@ -312,9 +313,9 @@ onMounted(() => {
 }
 
 .match-card.my-match {
-  border-color: #059669;
-  background: #F0FDF4;
-  box-shadow: 0 0 0 1px #059669;
+  border-color: var(--color-primary-dark);
+  background: var(--color-success-light);
+  box-shadow: 0 0 0 1px var(--color-primary-dark);
 }
 
 .match-header {
@@ -335,12 +336,12 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 12px;
-  background: #F8FAFC;
+  background: var(--color-surface);
   border-radius: 8px;
 }
 
 .team.winner {
-  background: #D1FAE5;
+  background: var(--color-success-bg);
 }
 
 .team-players {
@@ -351,39 +352,39 @@ onMounted(() => {
 
 .player-name {
   font-size: 0.9rem;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .player-name.is-me {
   font-weight: 600;
-  color: #059669;
+  color: var(--color-primary-dark);
 }
 
 .team-score {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .team.winner .team-score {
-  color: #059669;
+  color: var(--color-primary-dark);
 }
 
 .vs-divider {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #94A3B8;
+  color: var(--color-muted-light);
   padding: 0 8px;
 }
 
 .no-matches {
   text-align: center;
   padding: 24px;
-  color: #64748B;
+  color: var(--color-muted);
 }
 
 .empty-card {
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
   border-radius: 16px;
 }
 

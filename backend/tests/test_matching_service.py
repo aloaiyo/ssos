@@ -5,47 +5,53 @@
 여기서는 헬퍼 함수와 로직만 테스트
 """
 import pytest
-from datetime import time, timedelta
+from datetime import time, datetime, timedelta
 
-from app.services.matching_service import _add_minutes
 from app.models.match import MatchType, MatchStatus, Team
 
 
+def add_minutes_to_time(original_time: time, minutes: int) -> time:
+    """테스트용 시간 더하기 유틸 (datetime + timedelta 사용)"""
+    base_dt = datetime.combine(datetime.today(), original_time)
+    result_dt = base_dt + timedelta(minutes=minutes)
+    return result_dt.time()
+
+
 class TestAddMinutes:
-    """_add_minutes 헬퍼 함수 테스트"""
+    """시간 더하기 로직 테스트"""
 
     def test_add_30_minutes(self):
         """30분 추가"""
         original = time(9, 0)
-        result = _add_minutes(original, 30)
+        result = add_minutes_to_time(original, 30)
 
         assert result == time(9, 30)
 
     def test_add_minutes_crosses_hour(self):
         """시간 경계 넘기"""
         original = time(9, 45)
-        result = _add_minutes(original, 30)
+        result = add_minutes_to_time(original, 30)
 
         assert result == time(10, 15)
 
     def test_add_60_minutes(self):
         """60분 추가"""
         original = time(10, 0)
-        result = _add_minutes(original, 60)
+        result = add_minutes_to_time(original, 60)
 
         assert result == time(11, 0)
 
     def test_add_minutes_multiple_hours(self):
         """여러 시간 추가"""
         original = time(9, 0)
-        result = _add_minutes(original, 180)  # 3시간
+        result = add_minutes_to_time(original, 180)  # 3시간
 
         assert result == time(12, 0)
 
     def test_add_zero_minutes(self):
         """0분 추가"""
         original = time(9, 30)
-        result = _add_minutes(original, 0)
+        result = add_minutes_to_time(original, 0)
 
         assert result == time(9, 30)
 
@@ -172,7 +178,7 @@ class TestTimeSlotCalculation:
         current = start
         for _ in range(num_slots):
             slots.append(current)
-            current = _add_minutes(current, duration)
+            current = add_minutes_to_time(current, duration)
 
         assert len(slots) == 6
         assert slots[0] == time(9, 0)
@@ -190,7 +196,7 @@ class TestTimeSlotCalculation:
         slots = []
         for _ in range(5):
             slots.append(current)
-            current = _add_minutes(current, total_duration)
+            current = add_minutes_to_time(current, total_duration)
 
         assert slots[0] == time(9, 0)
         assert slots[1] == time(9, 35)

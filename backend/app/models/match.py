@@ -70,11 +70,8 @@ class Match(BaseModel):
         return to_kst(self.scheduled_datetime).time()
 
 
-class ParticipantCategory(str, Enum):
-    """참가자 유형"""
-    MEMBER = "member"        # 정회원 (동호회 가입)
-    GUEST = "guest"          # 게스트 (시스템 미가입)
-    ASSOCIATE = "associate"  # 준회원 (시스템 가입, 동호회 미가입)
+# ParticipantCategory는 event.py에서 정의, 하위 호환용 re-export
+from app.models.event import ParticipantCategory  # noqa: F811
 
 
 class MatchParticipant(BaseModel):

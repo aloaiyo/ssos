@@ -2,14 +2,15 @@
   <div class="session-detail-page">
     <!-- 로딩 -->
     <div v-if="isLoading" class="loading-container">
-      <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
+      <v-skeleton-loader type="article, actions" class="mb-4" />
+      <v-skeleton-loader type="table-heading, table-row-divider@3" />
     </div>
 
     <template v-else-if="session">
       <!-- 세션 정보 헤더 -->
       <div class="session-header">
         <div class="header-content">
-          <v-btn icon variant="text" @click="goBack" class="back-btn">
+          <v-btn icon variant="text" @click="goBack" class="back-btn" aria-label="뒤로 가기">
             <v-icon>mdi-arrow-left</v-icon>
           </v-btn>
           <div class="session-info">
@@ -38,7 +39,7 @@
               </span>
             </div>
           </div>
-          <v-btn icon variant="text" @click="showEditDialog = true">
+          <v-btn v-if="isManager" icon variant="text" @click="showEditDialog = true" aria-label="세션 수정">
             <v-icon>mdi-pencil</v-icon>
           </v-btn>
         </div>
@@ -100,7 +101,7 @@
         <v-window-item value="participants">
           <div class="tab-header">
             <h2 class="section-title">참가자 ({{ participants.length }}명)</h2>
-            <v-btn color="primary" variant="flat" size="small" @click="showAddParticipantDialog = true">
+            <v-btn v-if="isManager" color="primary" variant="flat" size="small" @click="showAddParticipantDialog = true">
               <v-icon start size="18">mdi-account-plus</v-icon>
               참가자 추가
             </v-btn>
@@ -130,11 +131,13 @@
                   <span class="participant-gender">{{ getGenderLabel(getParticipantGender(participant)) }}</span>
                 </div>
                 <v-btn
+                  v-if="isManager"
                   icon
                   variant="text"
                   size="small"
                   color="error"
                   @click="removeParticipant(participant)"
+                  aria-label="참가자 제거"
                 >
                   <v-icon size="18">mdi-close</v-icon>
                 </v-btn>
@@ -204,7 +207,7 @@
                     </div>
                   </div>
                 </div>
-                <v-btn icon variant="text" size="small" @click="openScoreDialog(match)">
+                <v-btn v-if="isManager" icon variant="text" size="small" @click="openScoreDialog(match)" aria-label="점수 입력">
                   <v-icon size="18">mdi-pencil</v-icon>
                 </v-btn>
               </div>
@@ -327,7 +330,7 @@
     </v-dialog>
 
     <!-- 참가자 추가 다이얼로그 -->
-    <v-dialog v-model="showAddParticipantDialog" max-width="400">
+    <v-dialog v-model="showAddParticipantDialog" max-width="400" :fullscreen="mobile">
       <v-card>
         <v-card-title>참가자 추가</v-card-title>
         <v-card-text>
@@ -359,7 +362,7 @@
     </v-dialog>
 
     <!-- 점수 입력 다이얼로그 -->
-    <v-dialog v-model="showScoreDialog" max-width="350">
+    <v-dialog v-model="showScoreDialog" max-width="350" :fullscreen="mobile">
       <v-card>
         <v-card-title>점수 입력</v-card-title>
         <v-card-text>
@@ -370,21 +373,27 @@
                 v-model.number="scoreForm.score_a"
                 type="number"
                 min="0"
+                max="99"
                 variant="outlined"
                 density="compact"
                 class="score-input"
+                aria-label="팀 A 점수"
+                :rules="[v => (v >= 0 && v <= 99) || '0~99 사이 값을 입력하세요']"
               ></v-text-field>
             </div>
-            <span class="score-divider">:</span>
+            <span class="score-divider" aria-hidden="true">:</span>
             <div class="team-score">
               <p class="team-label">팀 B</p>
               <v-text-field
                 v-model.number="scoreForm.score_b"
                 type="number"
                 min="0"
+                max="99"
                 variant="outlined"
                 density="compact"
                 class="score-input"
+                aria-label="팀 B 점수"
+                :rules="[v => (v >= 0 && v <= 99) || '0~99 사이 값을 입력하세요']"
               ></v-text-field>
             </div>
           </div>
@@ -466,7 +475,7 @@
             ></v-text-field>
           </div>
 
-          <v-alert v-if="aiGenerateError" type="error" density="compact" class="mt-3">
+          <v-alert v-if="aiGenerateError" type="error" density="compact" class="mt-3" role="alert">
             {{ aiGenerateError }}
           </v-alert>
         </v-card-text>
@@ -552,10 +561,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useDisplay } from 'vuetify'
 import { useClubStore } from '@/stores/club'
-import sessionsApi from '@/api/sessions'
-import seasonsApi from '@/api/seasons'
-import clubsApi from '@/api/clubs'
+import { useSessionStore } from '@/stores/session'
+import { useSeasonStore } from '@/stores/season'
+import { useMemberStore } from '@/stores/member'
 import {
   getSessionTypeColor,
   getSessionTypeLabel,
@@ -564,10 +574,18 @@ import {
   getGenderLabel,
   DAY_OF_WEEK
 } from '@/utils/constants'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { mobile } = useDisplay()
+
+const { showAlert } = useConfirmDialog()
 
 const route = useRoute()
 const router = useRouter()
 const clubStore = useClubStore()
+const sessionStore = useSessionStore()
+const seasonStore = useSeasonStore()
+const memberStore = useMemberStore()
 
 const selectedClub = computed(() => clubStore.selectedClub)
 const isManager = computed(() => clubStore.isManagerOfSelectedClub)
@@ -583,7 +601,7 @@ const isPastSession = computed(() => {
 // 경기 결과가 모두 입력되었는지 확인
 const hasAllResults = computed(() => {
   if (matches.value.length === 0) return true
-  return matches.value.every(m => (m.score_a !== null && m.score_a !== undefined) || (m.score_b !== null && m.score_b !== undefined))
+  return matches.value.every(m => (m.score_a !== null && m.score_a !== undefined) && (m.score_b !== null && m.score_b !== undefined))
 })
 
 // 결과 입력 유도 배너 표시 여부
@@ -780,8 +798,8 @@ async function loadSession() {
 
   isLoading.value = true
   try {
-    const response = await sessionsApi.getSession(selectedClub.value.id, sessionId)
-    session.value = response.data
+    const data = await sessionStore.fetchSession(selectedClub.value.id, sessionId)
+    session.value = data
 
     // 폼 초기화 (새 구조)
     editForm.value = {
@@ -811,10 +829,8 @@ async function loadSession() {
 async function loadParticipants() {
   if (!selectedClub.value?.id || !session.value?.id) return
   try {
-    const response = await sessionsApi.getSessionParticipants(selectedClub.value.id, session.value.id)
-    participants.value = Array.isArray(response.data) ? response.data : []
-  } catch (error) {
-    console.error('참가자 조회 실패:', error)
+    participants.value = await sessionStore.fetchParticipants(selectedClub.value.id, session.value.id)
+  } catch {
     participants.value = []
   }
 }
@@ -822,10 +838,8 @@ async function loadParticipants() {
 async function loadMatches() {
   if (!selectedClub.value?.id || !session.value?.id) return
   try {
-    const response = await sessionsApi.getMatches(selectedClub.value.id, session.value.id)
-    matches.value = Array.isArray(response.data) ? response.data : []
-  } catch (error) {
-    console.error('경기 조회 실패:', error)
+    matches.value = await sessionStore.fetchMatches(selectedClub.value.id, session.value.id)
+  } catch {
     matches.value = []
   }
 }
@@ -833,10 +847,9 @@ async function loadMatches() {
 async function loadClubMembers() {
   if (!selectedClub.value?.id) return
   try {
-    const response = await clubsApi.getClubMembers(selectedClub.value.id)
-    clubMembers.value = Array.isArray(response.data) ? response.data : []
-  } catch (error) {
-    console.error('회원 목록 조회 실패:', error)
+    await memberStore.fetchMembers(selectedClub.value.id)
+    clubMembers.value = memberStore.members
+  } catch {
     clubMembers.value = []
   }
 }
@@ -844,10 +857,9 @@ async function loadClubMembers() {
 async function loadSeasons() {
   if (!selectedClub.value?.id) return
   try {
-    const response = await seasonsApi.getSeasons(selectedClub.value.id)
-    seasons.value = Array.isArray(response.data) ? response.data : []
-  } catch (error) {
-    console.error('시즌 목록 조회 실패:', error)
+    await seasonStore.fetchSeasons(selectedClub.value.id)
+    seasons.value = seasonStore.seasons
+  } catch {
     seasons.value = []
   }
 }
@@ -855,10 +867,9 @@ async function loadSeasons() {
 async function loadMyParticipation() {
   if (!selectedClub.value?.id || !session.value?.id) return
   try {
-    const response = await sessionsApi.getMyParticipation(selectedClub.value.id, session.value.id)
-    myParticipation.value = response.data
-  } catch (error) {
-    console.error('참가 여부 조회 실패:', error)
+    const data = await sessionStore.fetchMyParticipation(selectedClub.value.id, session.value.id)
+    myParticipation.value = data
+  } catch {
     myParticipation.value = null
   }
 }
@@ -868,20 +879,12 @@ async function toggleParticipation() {
 
   isTogglingParticipation.value = true
   try {
-    if (myParticipation.value?.is_participating) {
-      // 참가 취소
-      await sessionsApi.leaveSession(selectedClub.value.id, session.value.id)
-      myParticipation.value = { ...myParticipation.value, is_participating: false }
-    } else {
-      // 참가
-      await sessionsApi.joinSession(selectedClub.value.id, session.value.id)
-      myParticipation.value = { ...myParticipation.value, is_participating: true }
-    }
+    await sessionStore.toggleParticipation(selectedClub.value.id, session.value.id)
+    myParticipation.value = sessionStore.myParticipation
     // 참가자 목록 새로고침
     await loadParticipants()
   } catch (error) {
-    console.error('참가 상태 변경 실패:', error)
-    alert(error.response?.data?.detail || '참가 상태 변경에 실패했습니다')
+    showAlert(error.response?.data?.detail || '참가 상태 변경에 실패했습니다')
   } finally {
     isTogglingParticipation.value = false
   }
@@ -896,7 +899,7 @@ async function saveSession() {
     const d = new Date(editForm.value.date)
     const datePart = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-    await sessionsApi.updateSession(selectedClub.value.id, session.value.id, {
+    await sessionStore.updateSession(selectedClub.value.id, session.value.id, {
       title: editForm.value.title,
       date: datePart,
       start_time: editForm.value.start_time + ':00',
@@ -934,7 +937,7 @@ async function deleteSession() {
 
   isDeleting.value = true
   try {
-    await sessionsApi.deleteSession(selectedClub.value.id, session.value.id)
+    await sessionStore.deleteSession(selectedClub.value.id, session.value.id)
     showDeleteDialog.value = false
     goBack()
   } catch (error) {
@@ -948,7 +951,7 @@ async function addParticipant(member) {
   if (!selectedClub.value?.id || !session.value?.id) return
 
   try {
-    await sessionsApi.addParticipant(selectedClub.value.id, session.value.id, member.id)
+    await sessionStore.addParticipant(selectedClub.value.id, session.value.id, member.id)
     await loadParticipants()
   } catch (error) {
     console.error('참가자 추가 실패:', error)
@@ -965,7 +968,7 @@ async function removeParticipant(participant) {
       console.error('참가자 ID를 찾을 수 없습니다')
       return
     }
-    await sessionsApi.removeParticipant(selectedClub.value.id, session.value.id, participantId)
+    await sessionStore.removeParticipant(selectedClub.value.id, session.value.id, participantId)
     await loadParticipants()
   } catch (error) {
     console.error('참가자 제거 실패:', error)
@@ -977,7 +980,7 @@ async function generateMatches() {
 
   isGenerating.value = true
   try {
-    await sessionsApi.generateMatches(selectedClub.value.id, session.value.id)
+    await sessionStore.generateMatches(selectedClub.value.id, session.value.id)
     await loadMatches()
     activeTab.value = 'matches'
   } catch (error) {
@@ -994,7 +997,7 @@ async function generateAIMatches() {
   aiGenerateError.value = ''
 
   try {
-    const response = await sessionsApi.generateAIMatches(
+    const data = await sessionStore.generateAIMatches(
       selectedClub.value.id,
       session.value.id,
       {
@@ -1003,7 +1006,7 @@ async function generateAIMatches() {
         break_duration_minutes: aiGenerateForm.value.break_duration_minutes
       }
     )
-    aiPreviewData.value = response.data
+    aiPreviewData.value = data
     showAIGenerateDialog.value = false
     showAIPreviewDialog.value = true
   } catch (error) {
@@ -1024,7 +1027,7 @@ async function confirmAIMatches() {
 
   isConfirmingAI.value = true
   try {
-    await sessionsApi.confirmAIMatches(
+    await sessionStore.confirmAIMatches(
       selectedClub.value.id,
       session.value.id,
       aiPreviewData.value.matches
@@ -1035,7 +1038,7 @@ async function confirmAIMatches() {
     activeTab.value = 'matches'
   } catch (error) {
     console.error('경기 확정 실패:', error)
-    alert(error.response?.data?.detail || '경기 확정에 실패했습니다')
+    showAlert(error.response?.data?.detail || '경기 확정에 실패했습니다')
   } finally {
     isConfirmingAI.value = false
   }
@@ -1055,8 +1058,7 @@ async function saveScore() {
 
   isSavingScore.value = true
   try {
-    // 백엔드는 /clubs/{club_id}/sessions/{session_id}/matches/{match_id} 엔드포인트 사용
-    await sessionsApi.updateMatch(
+    await sessionStore.saveMatchResult(
       selectedClub.value.id,
       session.value.id,
       selectedMatch.value.id,
@@ -1098,7 +1100,7 @@ onMounted(() => {
   border-radius: 16px;
   padding: 20px;
   margin-bottom: 16px;
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
 }
 
 .header-content {
@@ -1125,7 +1127,7 @@ onMounted(() => {
 .session-title {
   font-size: 1.4rem;
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .session-meta {
@@ -1139,7 +1141,7 @@ onMounted(() => {
   align-items: center;
   gap: 4px;
   font-size: 0.85rem;
-  color: #64748B;
+  color: var(--color-muted);
 }
 
 .session-tabs {
@@ -1160,7 +1162,7 @@ onMounted(() => {
 .section-title {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .empty-state {
@@ -1179,7 +1181,7 @@ onMounted(() => {
 }
 
 .participant-card {
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 12px;
 }
@@ -1198,12 +1200,12 @@ onMounted(() => {
 
 .participant-name {
   font-weight: 500;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .participant-gender {
   font-size: 0.8rem;
-  color: #64748B;
+  color: var(--color-muted);
 }
 
 .match-list {
@@ -1213,7 +1215,7 @@ onMounted(() => {
 }
 
 .match-card {
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 16px;
 }
@@ -1251,7 +1253,7 @@ onMounted(() => {
 
 .team span {
   font-size: 0.9rem;
-  color: #1E293B;
+  color: var(--color-dark);
 }
 
 .match-score {
@@ -1260,11 +1262,11 @@ onMounted(() => {
   gap: 8px;
   font-size: 1.5rem;
   font-weight: 700;
-  color: #059669;
+  color: var(--color-primary-dark);
 }
 
 .match-score .divider {
-  color: #94A3B8;
+  color: var(--color-muted-light);
 }
 
 .member-select-list {
@@ -1278,7 +1280,7 @@ onMounted(() => {
 }
 
 .member-select-item:hover {
-  background: #F1F5F9;
+  background: var(--color-surface-hover);
 }
 
 .score-input-container {
@@ -1294,7 +1296,7 @@ onMounted(() => {
 
 .team-label {
   font-size: 0.85rem;
-  color: #64748B;
+  color: var(--color-muted);
   margin-bottom: 8px;
 }
 
@@ -1305,7 +1307,7 @@ onMounted(() => {
 .score-divider {
   font-size: 2rem;
   font-weight: 700;
-  color: #94A3B8;
+  color: var(--color-muted-light);
 }
 
 /* 시간 선택 스타일 */
@@ -1317,7 +1319,7 @@ onMounted(() => {
   display: block;
   font-size: 0.875rem;
   font-weight: 500;
-  color: #64748B;
+  color: var(--color-muted);
   margin-bottom: 8px;
 }
 
@@ -1328,7 +1330,7 @@ onMounted(() => {
 
 /* 참가 섹션 */
 .participation-section {
-  border-top: 1px solid #E2E8F0;
+  border-top: 1px solid var(--color-border);
   margin-top: 16px;
   padding-top: 16px;
 }
@@ -1343,7 +1345,7 @@ onMounted(() => {
 
 /* AI 미리보기 스타일 */
 .ai-preview-match {
-  border-bottom: 1px solid #E2E8F0;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .ai-preview-match:last-child {
@@ -1356,7 +1358,7 @@ onMounted(() => {
 }
 
 .vs-text {
-  color: #94A3B8;
+  color: var(--color-muted-light);
   font-weight: 600;
   font-size: 0.8rem;
 }

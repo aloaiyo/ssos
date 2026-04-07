@@ -3,10 +3,16 @@ AWS Cognito 서비스
 """
 import boto3
 import asyncio
+import time as time_module
 from functools import partial
 from botocore.exceptions import ClientError
 from typing import Optional, Dict
 from app.config import settings
+
+# JWKS 캐시 (모듈 레벨)
+_jwks_cache: Optional[Dict] = None
+_jwks_cache_time: float = 0
+_JWKS_CACHE_TTL: float = 3600  # 1시간
 
 # Cognito 클라이언트 생성
 cognito_client = boto3.client(
@@ -34,7 +40,7 @@ class CognitoService:
         Raises:
             ClientError: Cognito API 오류
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             response = await loop.run_in_executor(
                 None,
@@ -75,7 +81,7 @@ class CognitoService:
         Raises:
             ClientError: Cognito API 오류
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             # Secret이 있는 경우 SECRET_HASH 추가
             auth_parameters = {
@@ -130,7 +136,7 @@ class CognitoService:
         Returns:
             확인 결과
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             # Secret Hash 생성 (필요한 경우)
             params = {
@@ -179,7 +185,7 @@ class CognitoService:
         Returns:
             발송 결과
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             params = {
                 'ClientId': settings.COGNITO_CLIENT_ID,
@@ -224,7 +230,7 @@ class CognitoService:
         Returns:
             사용자 정보 딕셔너리
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             response = await loop.run_in_executor(
                 None,
@@ -252,7 +258,7 @@ class CognitoService:
         Returns:
             사용자 정보 딕셔너리
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             response = await loop.run_in_executor(
                 None,
@@ -276,7 +282,7 @@ class CognitoService:
         Returns:
             사용자 정보 딕셔너리 또는 None
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             response = await loop.run_in_executor(
                 None,
@@ -323,74 +329,99 @@ class CognitoService:
         Raises:
             ValueError: 토큰 검증 실패
         """
+        global _jwks_cache, _jwks_cache_time
+
         import jwt
         import requests
         from jose import jwk, jwt as jose_jwt
         from jose.utils import base64url_decode
-        
+
         try:
             # JWKS URL 구성
             jwks_url = f"https://cognito-idp.{settings.AWS_REGION}.amazonaws.com/{settings.COGNITO_USER_POOL_ID}/.well-known/jwks.json"
-            
+
             import logging
             logger = logging.getLogger(__name__)
-            logger.info(f"JWKS URL: {jwks_url}")
-            
-            # JWKS 가져오기
-            loop = asyncio.get_event_loop()
-            jwks_response = await loop.run_in_executor(
-                None,
-                requests.get,
-                jwks_url
-            )
-            
-            if jwks_response.status_code != 200:
-                logger.error(f"JWKS 조회 실패: status={jwks_response.status_code}, body={jwks_response.text}")
-                raise ValueError(f"JWKS 조회 실패: {jwks_response.status_code}")
-                
-            jwks = jwks_response.json()
-            
+
+            # JWKS 캐시 확인 (_jwks_cache 사용)
+            now = time_module.time()
+            if _jwks_cache is None or (now - _jwks_cache_time) > _JWKS_CACHE_TTL:
+                logger.info(f"JWKS 캐시 갱신: {jwks_url}")
+                loop = asyncio.get_running_loop()
+                jwks_response = await loop.run_in_executor(
+                    None,
+                    requests.get,
+                    jwks_url
+                )
+
+                if jwks_response.status_code != 200:
+                    logger.error(f"JWKS 조회 실패: status={jwks_response.status_code}, body={jwks_response.text}")
+                    raise ValueError(f"JWKS 조회 실패: {jwks_response.status_code}")
+
+                _jwks_cache = jwks_response.json()
+                _jwks_cache_time = now
+
+            jwks = _jwks_cache
+
             # 토큰 헤더에서 kid 추출
             headers = jwt.get_unverified_header(id_token)
             kid = headers.get('kid')
             logger.info(f"Token KID: {kid}")
-            
+
             # kid에 해당하는 키 찾기
             key = None
             for jwk_key in jwks.get('keys', []):
                 if jwk_key.get('kid') == kid:
                     key = jwk_key
                     break
-            
+
             if not key:
-                raise ValueError('토큰 검증 키를 찾을 수 없습니다')
-            
+                # kid가 캐시에 없으면 키 로테이션 가능성 — 캐시 강제 갱신 후 재시도
+                logger.warning(f"KID {kid}를 캐시에서 찾을 수 없음. JWKS 캐시 강제 갱신 시도.")
+                _jwks_cache = None
+                _jwks_cache_time = 0
+                loop = asyncio.get_running_loop()
+                jwks_response = await loop.run_in_executor(None, requests.get, jwks_url)
+                if jwks_response.status_code == 200:
+                    _jwks_cache = jwks_response.json()
+                    _jwks_cache_time = time_module.time()
+                    jwks = _jwks_cache
+                    for jwk_key in jwks.get('keys', []):
+                        if jwk_key.get('kid') == kid:
+                            key = jwk_key
+                            break
+                if not key:
+                    raise ValueError('토큰 검증 키를 찾을 수 없습니다')
+
             # 토큰 검증 및 디코딩
             public_key = jwk.construct(key)
             message, encoded_signature = str(id_token).rsplit('.', 1)
             decoded_signature = base64url_decode(encoded_signature.encode('utf-8'))
-            
+
             if not public_key.verify(message.encode("utf-8"), decoded_signature):
                 raise ValueError('토큰 서명이 유효하지 않습니다')
-            
+
             # 토큰 디코딩
             claims = jose_jwt.get_unverified_claims(id_token)
-            
+
             # 토큰 만료 확인
-            import time
-            if claims.get('exp', 0) < time.time():
+            if claims.get('exp', 0) < time_module.time():
                 raise ValueError('토큰이 만료되었습니다')
-            
+
             # 토큰 발급자 확인
             expected_issuer = f"https://cognito-idp.{settings.AWS_REGION}.amazonaws.com/{settings.COGNITO_USER_POOL_ID}"
             if claims.get('iss') != expected_issuer:
                 raise ValueError('토큰 발급자가 올바르지 않습니다')
-            
-            # 클라이언트 ID 확인
+
+            # 클라이언트 ID (aud) 확인
+            if claims.get('aud') != settings.COGNITO_CLIENT_ID:
+                raise ValueError('토큰의 대상(aud)이 올바르지 않습니다')
+
+            # 토큰 타입 확인
             token_use = claims.get('token_use')
             if token_use != 'id':
                 raise ValueError('ID Token이 아닙니다')
-            
+
             return claims
         except Exception as e:
             raise ValueError(f'토큰 검증 실패: {str(e)}')
@@ -428,7 +459,7 @@ class CognitoService:
                 data['client_secret'] = settings.COGNITO_CLIENT_SECRET
             
             # 토큰 교환
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
                 None,
                 lambda: requests.post(token_url, data=data, headers={'Content-Type': 'application/x-www-form-urlencoded'})

@@ -66,6 +66,40 @@ class GuestResponse(PydanticBase):
     created_by_name: Optional[str] = None
 
 
+def _build_guest_response_with_map(guest: Guest, member_map: dict) -> GuestResponse:
+    """게스트 응답 객체 생성 (배치 조회된 멤버 맵 사용)"""
+    linked_member_name = None
+    created_by_name = None
+
+    if guest.linked_member_id:
+        linked_member = member_map.get(guest.linked_member_id)
+        if linked_member:
+            linked_member_name = linked_member.user.name or linked_member.nickname
+
+    if guest.created_by_id:
+        created_by = member_map.get(guest.created_by_id)
+        if created_by:
+            created_by_name = created_by.user.name or created_by.nickname
+
+    return GuestResponse(
+        id=guest.id,
+        name=guest.name,
+        gender=guest.gender.value,
+        phone=guest.phone,
+        notes=guest.notes,
+        total_games=guest.total_games,
+        wins=guest.wins,
+        losses=guest.losses,
+        draws=guest.draws,
+        win_rate=guest.win_rate,
+        is_linked=guest.linked_member_id is not None,
+        linked_member_id=guest.linked_member_id,
+        linked_member_name=linked_member_name,
+        created_by_id=guest.created_by_id,
+        created_by_name=created_by_name,
+    )
+
+
 async def _build_guest_response(guest: Guest) -> GuestResponse:
     """게스트 응답 객체 생성"""
     linked_member_name = None
@@ -119,7 +153,17 @@ async def list_guests(
 
     guests = await query
 
-    return [await _build_guest_response(g) for g in guests]
+    # 배치 쿼리로 관련 멤버 정보 일괄 조회 (N+1 방지)
+    linked_member_ids = [g.linked_member_id for g in guests if g.linked_member_id]
+    created_by_ids = [g.created_by_id for g in guests if g.created_by_id]
+    all_member_ids = list(set(linked_member_ids + created_by_ids))
+
+    member_map = {}
+    if all_member_ids:
+        members = await ClubMember.filter(id__in=all_member_ids).prefetch_related("user")
+        member_map = {m.id: m for m in members}
+
+    return [_build_guest_response_with_map(g, member_map) for g in guests]
 
 
 @router.post("")

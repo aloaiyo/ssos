@@ -522,6 +522,7 @@ import sessionsApi from '@/api/sessions'
 import membersApi from '@/api/members'
 import * as guestsApi from '@/api/guests'
 import { getMatchTypeColor, getMatchTypeLabel } from '@/utils/constants'
+import { today } from '@/utils/date'
 
 const router = useRouter()
 const clubStore = useClubStore()
@@ -552,7 +553,7 @@ const isLoadingSessions = ref(false)
 
 const newSession = ref({
   title: '',
-  date: new Date().toISOString().split('T')[0],
+  date: today(),
   location: '',
   start_time: '09:00',
   end_time: '12:00'

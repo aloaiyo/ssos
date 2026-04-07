@@ -135,8 +135,8 @@ async def update_match(
     # 수정
     if match_data.court_number is not None:
         match.court_number = match_data.court_number
-    if match_data.scheduled_time is not None:
-        match.scheduled_time = match_data.scheduled_time
+    if match_data.scheduled_datetime is not None:
+        match.scheduled_datetime = match_data.scheduled_datetime
     if match_data.status is not None:
         match.status = match_data.status
 

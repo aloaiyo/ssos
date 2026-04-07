@@ -5,6 +5,7 @@
       v-if="isMobile"
       class="ml-2"
       @click.stop="toggleDrawer"
+      aria-label="메뉴 열기"
     ></v-app-bar-nav-icon>
 
     <v-spacer></v-spacer>
@@ -90,9 +91,13 @@
     </v-menu>
 
     <!-- 알림 버튼 -->
-    <v-btn icon variant="text" class="mr-1">
-      <v-icon>mdi-bell-outline</v-icon>
-    </v-btn>
+    <v-tooltip text="준비 중" location="bottom">
+      <template v-slot:activator="{ props }">
+        <v-btn icon variant="text" class="mr-1" v-bind="props" disabled aria-label="알림">
+          <v-icon>mdi-bell-outline</v-icon>
+        </v-btn>
+      </template>
+    </v-tooltip>
 
     <!-- 사용자 메뉴 -->
     <v-menu offset-y>
@@ -195,7 +200,7 @@ const userInitial = computed(() => {
 // 선택된 클럽 이름
 const selectedClubName = computed(() => {
   if (!selectedClubId.value) return '동호회 선택'
-  const club = clubs.value.find(c => c.id === parseInt(selectedClubId.value))
+  const club = clubs.value.find(c => c.id === parseInt(selectedClubId.value, 10))
   return club?.name || '동호회 선택'
 })
 

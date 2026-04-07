@@ -11,7 +11,7 @@
 
     <!-- 시즌 목록 -->
     <div v-if="isLoading" class="loading-container">
-      <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
+      <v-skeleton-loader type="card@3" />
     </div>
 
     <div v-else-if="seasons.length === 0" class="empty-state">
@@ -49,10 +49,10 @@
             </div>
           </div>
           <div class="season-actions">
-            <v-btn icon variant="text" size="small" @click.stop="openEditDialog(season)">
+            <v-btn icon variant="text" size="small" @click.stop="openEditDialog(season)" aria-label="시즌 수정">
               <v-icon>mdi-pencil</v-icon>
             </v-btn>
-            <v-btn icon variant="text" size="small" color="error" @click.stop="confirmDelete(season)">
+            <v-btn icon variant="text" size="small" color="error" @click.stop="confirmDelete(season)" aria-label="시즌 삭제">
               <v-icon>mdi-delete</v-icon>
             </v-btn>
           </div>
@@ -155,6 +155,9 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useClubStore } from '@/stores/club'
 import { useSeasonStore } from '@/stores/season'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
+
+const { showAlert } = useConfirmDialog()
 
 const router = useRouter()
 const clubStore = useClubStore()
@@ -292,7 +295,7 @@ function closeDialog() {
 
 async function saveSeason() {
   if (!selectedClub.value?.id) {
-    alert('동호회를 선택해주세요')
+    showAlert('동호회를 선택해주세요')
     return
   }
 
@@ -312,7 +315,7 @@ async function saveSeason() {
     closeDialog()
   } catch (error) {
     console.error('시즌 저장 실패:', error)
-    alert(error.response?.data?.detail || '시즌 저장에 실패했습니다')
+    showAlert(error.response?.data?.detail || '시즌 저장에 실패했습니다')
   } finally {
     isSaving.value = false
   }
@@ -325,7 +328,7 @@ function confirmDelete(season) {
 
 async function deleteSeason() {
   if (!selectedClub.value?.id || !seasonToDelete.value) {
-    alert('동호회 또는 시즌 정보가 없습니다')
+    showAlert('동호회 또는 시즌 정보가 없습니다')
     return
   }
 
@@ -336,7 +339,7 @@ async function deleteSeason() {
     seasonToDelete.value = null
   } catch (error) {
     console.error('시즌 삭제 실패:', error)
-    alert(error.response?.data?.detail || '시즌 삭제에 실패했습니다')
+    showAlert(error.response?.data?.detail || '시즌 삭제에 실패했습니다')
   } finally {
     isDeleting.value = false
   }

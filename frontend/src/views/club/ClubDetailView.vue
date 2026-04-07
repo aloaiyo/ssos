@@ -217,7 +217,7 @@ const { members } = storeToRefs(memberStore)
 
 // 컴포넌트 마운트 시 동호회 정보 로드
 onMounted(async () => {
-  const clubId = parseInt(route.params.id)
+  const clubId = parseInt(route.params.id, 10)
   await clubStore.fetchClub(clubId)
   await memberStore.fetchMembers(clubId)
 })

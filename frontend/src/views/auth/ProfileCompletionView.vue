@@ -1,5 +1,5 @@
 <template>
-  <v-app>
+  <div class="profile-completion-wrapper">
     <v-container class="fill-height" fluid>
       <v-row align="center" justify="center">
         <v-col cols="12" sm="8" md="6" lg="4">
@@ -42,7 +42,7 @@
         </v-col>
       </v-row>
     </v-container>
-  </v-app>
+  </div>
 </template>
 
 <script setup>
@@ -108,8 +108,8 @@ async function handleSubmit() {
 <style scoped>
 .fill-height {
   min-height: 100vh;
-  /* 테니스 코트 색상 그라디언트 (#009630 기준) */
-  background: linear-gradient(135deg, #009630 0%, #006420 100%);
+  /* LoginView와 동일한 그라디언트 */
+  background: linear-gradient(135deg, #059669 0%, #10B981 50%, #34D399 100%);
 }
 
 .profile-card {
@@ -121,10 +121,9 @@ async function handleSubmit() {
 
 /* 테니스 테마 버튼 스타일 */
 :deep(.v-btn.bg-primary) {
-  background-color: #009630 !important;
+  background-color: var(--color-primary, #10B981) !important;
   color: #FFFFFF !important;
-  /* 어두운 배경이므로 흰색 텍스트 */
   font-weight: bold;
-  box-shadow: 0 4px 14px 0 rgba(0, 150, 48, 0.4);
+  box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.4);
 }
 </style>

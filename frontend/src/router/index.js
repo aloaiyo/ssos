@@ -83,7 +83,7 @@ const routes = [
     path: '/members/manage',
     name: 'member-manage',
     component: () => import('@/views/member/MemberManageView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true },
+    meta: { requiresAuth: true, requiresManager: true },
   },
   // 시즌
   {
@@ -193,6 +193,15 @@ router.beforeEach(async (to, from, next) => {
   // 관리자 권한이 필요한 페이지
   if (to.meta.requiresAdmin && !authStore.isAdmin) {
     return next({ name: 'home' })
+  }
+
+  // 클럽 매니저 권한이 필요한 페이지
+  if (to.meta.requiresManager) {
+    const { useClubStore } = await import('@/stores/club')
+    const clubStore = useClubStore()
+    if (!clubStore.isManagerOfSelectedClub) {
+      return next({ name: 'home' })
+    }
   }
 
   // 프로필 완성 체크 (인증된 사용자만)

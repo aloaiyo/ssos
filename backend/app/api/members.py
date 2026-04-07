@@ -52,19 +52,24 @@ class MemberListResponse(BaseModel):
 
 # ============ API Endpoints ============
 
-@router.get("", response_model=List[MemberResponse])
+@router.get("")
 async def list_members(
     club_id: int,
     status_filter: Optional[str] = None,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None,
     membership: ClubMember = Depends(require_club_member_not_guest)
-) -> List[MemberResponse]:
+):
     """
     회원 목록 조회
 
     - 게스트는 조회 불가 (403)
     - 매니저/일반회원만 조회 가능
+    - page 파라미터로 페이지네이션 지원
     """
     try:
+        from app.schemas.pagination import paginate_query
+
         query = ClubMember.filter(club_id=club_id, is_deleted=False).prefetch_related("user")
 
         if status_filter:
@@ -77,9 +82,9 @@ async def list_members(
                 )
             query = query.filter(status=status_filter)
 
-        members = await query
+        members, pagination = await paginate_query(query, page, page_size)
 
-        return [MemberResponse(
+        items = [MemberResponse(
             id=m.id,
             user_id=m.user_id,
             user_name=m.user.name or (m.user.email.split('@')[0] if m.user.email else '회원'),
@@ -89,6 +94,10 @@ async def list_members(
             status=m.status.value,
             created_at=serialize_to_kst(m.created_at),
         ) for m in members]
+
+        if pagination:
+            return {**pagination, "items": items}
+        return items
     except HTTPException:
         raise
     except Exception as e:

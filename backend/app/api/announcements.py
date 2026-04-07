@@ -3,7 +3,7 @@
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
 from app.models.user import User
@@ -31,6 +31,8 @@ class AnnouncementUpdate(BaseModel):
 
 
 class AnnouncementResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     title: str
     content: str
@@ -40,10 +42,7 @@ class AnnouncementResponse(BaseModel):
     author_id: Optional[int]
     author_name: Optional[str]
     created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
+    modified_at: datetime
 
 
 async def check_club_member(club_id: int, user: User) -> ClubMember:
@@ -99,7 +98,7 @@ async def get_announcements(
             author_id=a.author.id if a.author else None,
             author_name=a.author.name if a.author else None,
             created_at=a.created_at,
-            updated_at=a.updated_at,
+            modified_at=a.modified_at,
         )
         for a in announcements
     ]
@@ -133,7 +132,7 @@ async def create_announcement(
         author_id=current_user.id,
         author_name=current_user.name,
         created_at=announcement.created_at,
-        updated_at=announcement.updated_at,
+        modified_at=announcement.modified_at,
     )
 
 
@@ -172,7 +171,7 @@ async def get_announcement(
         author_id=announcement.author.id if announcement.author else None,
         author_name=announcement.author.name if announcement.author else None,
         created_at=announcement.created_at,
-        updated_at=announcement.updated_at,
+        modified_at=announcement.modified_at,
     )
 
 
@@ -219,7 +218,7 @@ async def update_announcement(
         author_id=announcement.author.id if announcement.author else None,
         author_name=announcement.author.name if announcement.author else None,
         created_at=announcement.created_at,
-        updated_at=announcement.updated_at,
+        modified_at=announcement.modified_at,
     )
 
 

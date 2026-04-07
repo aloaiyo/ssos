@@ -28,7 +28,7 @@ def create_access_token(user_id: int, expires_delta: Optional[timedelta] = None)
     if expires_delta:
         expire = now + expires_delta
     else:
-        expire = now + timedelta(days=settings.ACCESS_TOKEN_EXPIRE_DAYS)
+        expire = now + timedelta(hours=settings.ACCESS_TOKEN_EXPIRE_HOURS)
 
     to_encode = {
         "sub": str(user_id),
@@ -108,7 +108,7 @@ def get_cookie_settings() -> dict:
 def get_access_token_cookie_settings() -> dict:
     """액세스 토큰 쿠키 설정"""
     base = get_cookie_settings()
-    base["max_age"] = settings.ACCESS_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+    base["max_age"] = settings.ACCESS_TOKEN_EXPIRE_HOURS * 60 * 60
     return base
 
 

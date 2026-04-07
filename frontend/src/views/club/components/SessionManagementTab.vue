@@ -933,7 +933,10 @@ const calendarDays = computed(() => {
 function getTomorrowDate() {
   const tomorrow = new Date()
   tomorrow.setDate(tomorrow.getDate() + 1)
-  return tomorrow.toISOString().split('T')[0]
+  const year = tomorrow.getFullYear()
+  const month = String(tomorrow.getMonth() + 1).padStart(2, '0')
+  const day = String(tomorrow.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function getInitial(name) {
@@ -1465,8 +1468,8 @@ async function updateScore(matchId, teamAScore, teamBScore) {
 
   try {
     await apiClient.put(`/clubs/${props.clubId}/sessions/${selectedSessionId.value}/matches/${matchId}`, {
-      team_a_score: parseInt(teamAScore),
-      team_b_score: parseInt(teamBScore)
+      team_a_score: parseInt(teamAScore, 10),
+      team_b_score: parseInt(teamBScore, 10)
     })
   } catch (error) {
     console.error('점수 저장 실패:', error)

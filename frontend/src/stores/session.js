@@ -2,11 +2,18 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import sessionsApi from '@/api/sessions'
+import { today } from '@/utils/date'
+
+/** @typedef {import('@/types/api').Session} Session */
+/** @typedef {import('@/types/api').MyParticipation} MyParticipation */
 
 export const useSessionStore = defineStore('session', () => {
   // State
+  /** @type {import('vue').Ref<Session[]>} */
   const sessions = ref([])
+  /** @type {import('vue').Ref<Session|null>} */
   const currentSession = ref(null)
+  /** @type {import('vue').Ref<MyParticipation|null>} */
   const myParticipation = ref(null)
   const isLoading = ref(false)
   const error = ref(null)
@@ -16,13 +23,13 @@ export const useSessionStore = defineStore('session', () => {
   const isMember = computed(() => myParticipation.value?.is_member ?? false)
 
   const upcomingSessions = computed(() => {
-    const today = new Date().toISOString().split('T')[0]
-    return sessions.value.filter(s => s.date >= today && s.status !== 'cancelled')
+    const todayStr = today()
+    return sessions.value.filter(s => s.date >= todayStr && s.status !== 'cancelled')
   })
 
   const pastSessions = computed(() => {
-    const today = new Date().toISOString().split('T')[0]
-    return sessions.value.filter(s => s.date < today || s.status === 'completed')
+    const todayStr = today()
+    return sessions.value.filter(s => s.date < todayStr || s.status === 'completed')
   })
 
   // Actions
@@ -170,6 +177,52 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  // 세션 참가자 목록 조회
+  async function fetchParticipants(clubId, sessionId) {
+    try {
+      const response = await sessionsApi.getSessionParticipants(clubId, sessionId)
+      return Array.isArray(response.data) ? response.data : []
+    } catch (err) {
+      error.value = err.response?.data?.detail || '참가자 목록을 불러오는데 실패했습니다'
+      throw err
+    }
+  }
+
+  // 세션 경기 목록 조회
+  async function fetchMatches(clubId, sessionId) {
+    try {
+      const response = await sessionsApi.getMatches(clubId, sessionId)
+      return Array.isArray(response.data) ? response.data : []
+    } catch (err) {
+      error.value = err.response?.data?.detail || '경기 목록을 불러오는데 실패했습니다'
+      throw err
+    }
+  }
+
+  // AI 기반 경기 자동 생성 (미리보기)
+  async function generateAIMatches(clubId, sessionId, options = {}) {
+    error.value = null
+    try {
+      const response = await sessionsApi.generateAIMatches(clubId, sessionId, options)
+      return response.data
+    } catch (err) {
+      error.value = err.response?.data?.detail || 'AI 경기 생성에 실패했습니다'
+      throw err
+    }
+  }
+
+  // AI 생성 경기 확정
+  async function confirmAIMatches(clubId, sessionId, matches) {
+    error.value = null
+    try {
+      const response = await sessionsApi.confirmAIMatches(clubId, sessionId, matches)
+      return response.data
+    } catch (err) {
+      error.value = err.response?.data?.detail || '경기 확정에 실패했습니다'
+      throw err
+    }
+  }
+
   // 경기 자동 생성
   async function generateMatches(clubId, sessionId) {
     isLoading.value = true
@@ -236,6 +289,30 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  // 참가자 일괄 추가
+  async function addParticipantsBulk(clubId, sessionId, memberIds) {
+    error.value = null
+    try {
+      const response = await sessionsApi.addParticipantsBulk(clubId, sessionId, memberIds)
+      return response.data
+    } catch (err) {
+      error.value = err.response?.data?.detail || '참가자 일괄 추가에 실패했습니다'
+      throw err
+    }
+  }
+
+  // 점수 일괄 입력
+  async function updateMatchesBulkScores(clubId, sessionId, scores) {
+    error.value = null
+    try {
+      const response = await sessionsApi.updateMatchesBulkScores(clubId, sessionId, scores)
+      return response.data
+    } catch (err) {
+      error.value = err.response?.data?.detail || '점수 일괄 저장에 실패했습니다'
+      throw err
+    }
+  }
+
   function clearError() {
     error.value = null
   }
@@ -269,10 +346,16 @@ export const useSessionStore = defineStore('session', () => {
     joinSession,
     leaveSession,
     toggleParticipation,
+    fetchParticipants,
+    fetchMatches,
     generateMatches,
+    generateAIMatches,
+    confirmAIMatches,
     saveMatchResult,
     addParticipant,
     removeParticipant,
+    addParticipantsBulk,
+    updateMatchesBulkScores,
     clearError,
     resetState,
   }

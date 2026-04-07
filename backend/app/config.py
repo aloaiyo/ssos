@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     # JWT 설정
     SECRET_KEY: str = "your-secret-key-change-this-in-production"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_DAYS: int = 30       # 액세스 토큰 30일
+    ACCESS_TOKEN_EXPIRE_HOURS: int = 24       # 액세스 토큰 24시간
     REFRESH_TOKEN_EXPIRE_DAYS: int = 365     # 리프레시 토큰 365일
 
     # 쿠키 설정
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
 
     # 애플리케이션
     APP_NAME: str = "Tennis Club Management System"
-    DEBUG: bool = True
+    DEBUG: bool = False
 
     # CORS
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
@@ -67,6 +67,15 @@ class Settings(BaseSettings):
 
     def model_post_init(self, __context):
         """설정 초기화 후 SSM에서 값 로드"""
+        import logging
+        _logger = logging.getLogger(__name__)
+
+        # 기본 SECRET_KEY 사용 시 경고
+        if self.SECRET_KEY == "your-secret-key-change-this-in-production":
+            _logger.warning(
+                "SECRET_KEY가 기본값입니다. 프로덕션에서는 반드시 변경하세요!"
+            )
+
         if self.USE_AWS_SSM:
             print("AWS SSM Parameter Store에서 설정을 로드합니다...")
             
